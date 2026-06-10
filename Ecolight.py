@@ -1,24 +1,29 @@
+```python
 from flask import Flask, request, jsonify
 from datetime import datetime
 import sqlite3
+import os
 
 app = Flask(__name__)
 
 EMPRESA = "EcoLight Solutions"
+DB_NAME = "ecolight.db"
 
-# =========================
+
+# =====================================
 # BANCO DE DADOS
-# =========================
+# =====================================
 
 def criar_banco():
-    conn = sqlite3.connect("ecolight.db")
+
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS leituras (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        luz INTEGER,
-        data_hora TEXT
+        luz INTEGER NOT NULL,
+        data_hora TEXT NOT NULL
     )
     """)
 
@@ -26,14 +31,26 @@ def criar_banco():
     conn.close()
 
 
+# IMPORTANTE PARA O RENDER
+criar_banco()
+
+
+# =====================================
+# SALVAR LEITURA
+# =====================================
+
 def salvar_leitura(luz):
-    conn = sqlite3.connect("ecolight.db")
+
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     cursor.execute(
-        "INSERT INTO leituras (luz, data_hora) VALUES (?, ?)",
+        """
+        INSERT INTO leituras (luz, data_hora)
+        VALUES (?, ?)
+        """,
         (luz, data_hora)
     )
 
@@ -41,8 +58,13 @@ def salvar_leitura(luz):
     conn.close()
 
 
+# =====================================
+# INDICADORES
+# =====================================
+
 def obter_dados():
-    conn = sqlite3.connect("ecolight.db")
+
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
     cursor.execute("SELECT COUNT(*) FROM leituras")
@@ -69,8 +91,16 @@ def obter_dados():
     status = "💡 Ligada" if luz > 600 else "🌙 Desligada"
 
     consumo = round(total * 0.00045, 3)
+
     custo = round(consumo * 0.95, 2)
-    economia = max(0, min(100, round((1000 - luz) / 10)))
+
+    economia = max(
+        0,
+        min(
+            100,
+            round((1000 - luz) / 10)
+        )
+    )
 
     return {
         "total": total,
@@ -83,9 +113,9 @@ def obter_dados():
     }
 
 
-# =========================
+# =====================================
 # DASHBOARD
-# =========================
+# =====================================
 
 @app.route("/")
 def home():
@@ -94,20 +124,26 @@ def home():
 
     return f"""
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
+
 <head>
-<meta charset="utf-8">
-<title>EcoLight Solutions</title>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>{EMPRESA}</title>
 
 <style>
 
 body {{
-    font-family: Arial;
+    font-family: Arial, sans-serif;
     margin: 0;
-    background: #f5f5f5;
+    background: #f5f7fa;
 }}
 
-.header {{
+header {{
     background: #1565c0;
     color: white;
     text-align: center;
@@ -116,7 +152,9 @@ body {{
 
 .cards {{
     display: grid;
-    grid-template-columns: repeat(auto-fit,minmax(250px,1fr));
+    grid-template-columns:
+    repeat(auto-fit,minmax(220px,1fr));
+
     gap: 15px;
     padding: 20px;
 }}
@@ -125,7 +163,9 @@ body {{
     background: white;
     border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+
+    box-shadow:
+    0 2px 8px rgba(0,0,0,.15);
 }}
 
 .valor {{
@@ -135,10 +175,19 @@ body {{
 }}
 
 .grafico {{
-    background: white;
     margin: 20px;
-    padding: 20px;
+    background: white;
     border-radius: 12px;
+    padding: 20px;
+
+    box-shadow:
+    0 2px 8px rgba(0,0,0,.15);
+}}
+
+footer {{
+    text-align: center;
+    padding: 20px;
+    color: #666;
 }}
 
 </style>
@@ -147,10 +196,15 @@ body {{
 
 <body>
 
-<div class="header">
+<header>
+
 <h1>🌿 EcoLight Solutions</h1>
-<p>Monitoramento Inteligente de Energia</p>
-</div>
+
+<p>
+Monitoramento Inteligente de Energia
+</p>
+
+</header>
 
 <div class="cards">
 
@@ -187,9 +241,18 @@ body {{
 </div>
 
 <div class="grafico">
+
 <h2>📈 Últimas Leituras</h2>
+
 <canvas id="grafico"></canvas>
+
 </div>
+
+<footer>
+
+EcoLight Solutions © 2026
+
+</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -199,35 +262,50 @@ let chart;
 
 async function atualizar() {{
 
-    const r = await fetch('/grafico');
-    const dados = await r.json();
+    const r =
+    await fetch('/grafico');
+
+    const dados =
+    await r.json();
 
     if(!chart) {{
 
-        chart = new Chart(
-            document.getElementById('grafico'),
-            {{
-                type: 'line',
-                data: {{
-                    labels: dados.labels,
-                    datasets: [{{
-                        label: 'Luminosidade',
-                        data: dados.valores
-                    }}]
-                }}
+        chart =
+        new Chart(
+        document.getElementById('grafico'),
+        {{
+
+            type: 'line',
+
+            data: {{
+                labels: dados.labels,
+
+                datasets: [{{
+                    label: 'Luminosidade',
+                    data: dados.valores
+                }}]
             }}
-        );
+
+        }});
 
     }} else {{
 
-        chart.data.labels = dados.labels;
-        chart.data.datasets[0].data = dados.valores;
+        chart.data.labels =
+        dados.labels;
+
+        chart.data.datasets[0].data =
+        dados.valores;
+
         chart.update();
     }}
 }}
 
 atualizar();
-setInterval(atualizar, 5000);
+
+setInterval(
+    atualizar,
+    5000
+);
 
 </script>
 
@@ -236,34 +314,37 @@ setInterval(atualizar, 5000);
 """
 
 
-# =========================
-# RECEBER ESP8266
-# =========================
+# =====================================
+# RECEBER DADOS
+# =====================================
 
 @app.route("/dados")
 def receber():
 
     luz = request.args.get("luz")
 
-    if luz:
+    if luz is None:
+        return "SEM DADOS"
 
-        try:
-            salvar_leitura(int(luz))
-            return "OK"
-        except:
-            return "ERRO"
+    try:
 
-    return "SEM DADOS"
+        salvar_leitura(int(luz))
+
+        return "OK"
+
+    except Exception as e:
+
+        return f"ERRO: {e}"
 
 
-# =========================
+# =====================================
 # HISTÓRICO
-# =========================
+# =====================================
 
 @app.route("/historico")
 def historico():
 
-    conn = sqlite3.connect("ecolight.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -280,6 +361,7 @@ def historico():
     lista = []
 
     for r in registros:
+
         lista.append({
             "id": r[0],
             "luz": r[1],
@@ -289,14 +371,14 @@ def historico():
     return jsonify(lista)
 
 
-# =========================
-# DADOS DO GRÁFICO
-# =========================
+# =====================================
+# GRÁFICO
+# =====================================
 
 @app.route("/grafico")
 def grafico():
 
-    conn = sqlite3.connect("ecolight.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -316,6 +398,7 @@ def grafico():
     valores = []
 
     for r in registros:
+
         labels.append(r[1][-8:])
         valores.append(r[0])
 
@@ -325,21 +408,14 @@ def grafico():
     })
 
 
-# =========================
-# INICIAR
-# =========================
+# =====================================
+# INICIALIZAÇÃO
+# =====================================
 
 if __name__ == "__main__":
 
-    criar_banco()
-
-    print("=" * 40)
-    print("ECOLIGHT SOLUTIONS")
-    print("Servidor iniciado")
-    print("=" * 40)
-
     app.run(
         host="0.0.0.0",
-        port=5000,
-        debug=False
+        port=int(os.environ.get("PORT", 5000))
     )
+```
