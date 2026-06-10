@@ -37,7 +37,6 @@ def criar_banco():
     conn.close()
 
 
-# ⚠️ garante criação ao iniciar
 criar_banco()
 
 
@@ -46,7 +45,7 @@ criar_banco()
 # =====================================
 
 def salvar_leitura(luz):
-    criar_banco()  # 🔥 garante tabela no deploy limpo
+    criar_banco()
 
     conn = get_conn()
     cursor = conn.cursor()
@@ -67,7 +66,7 @@ def salvar_leitura(luz):
 # =====================================
 
 def obter_dados():
-    criar_banco()  # 🔥 evita erro "no such table"
+    criar_banco()
 
     conn = get_conn()
     cursor = conn.cursor()
@@ -157,6 +156,14 @@ def home():
                 font-weight: bold;
                 color: #1565c0;
             }}
+
+            .grafico {{
+                margin: 20px;
+                background: white;
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,.15);
+            }}
         </style>
     </head>
 
@@ -200,6 +207,59 @@ def home():
         </div>
 
     </div>
+
+    <div class="grafico">
+
+        <h2>📈 Gráfico de Luminosidade</h2>
+
+        <canvas id="grafico"></canvas>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+
+    let chart;
+
+    async function atualizar() {{
+
+        const r = await fetch('/grafico');
+        const dados = await r.json();
+
+        if (!chart) {{
+
+            chart = new Chart(
+                document.getElementById('grafico'),
+                {{
+                    type: 'line',
+                    data: {{
+                        labels: dados.labels,
+                        datasets: [{{
+                            label: 'Luminosidade',
+                            data: dados.valores,
+                            borderColor: '#1565c0',
+                            backgroundColor: 'rgba(21,101,192,0.2)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 3
+                        }}]
+                    }}
+                }}
+            );
+
+        }} else {{
+
+            chart.data.labels = dados.labels;
+            chart.data.datasets[0].data = dados.valores;
+            chart.update();
+        }}
+    }}
+
+    atualizar();
+    setInterval(atualizar, 5000);
+
+    </script>
 
     </body>
     </html>
