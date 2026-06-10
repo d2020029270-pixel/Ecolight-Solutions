@@ -10,7 +10,7 @@ DB_NAME = "ecolight.db"
 
 
 # =====================================
-# CONEXÃO PADRÃO
+# CONEXÃO
 # =====================================
 
 def get_conn():
@@ -18,7 +18,7 @@ def get_conn():
 
 
 # =====================================
-# BANCO DE DADOS
+# BANCO
 # =====================================
 
 def criar_banco():
@@ -41,7 +41,7 @@ criar_banco()
 
 
 # =====================================
-# SALVAR LEITURA
+# SALVAR
 # =====================================
 
 def salvar_leitura(luz):
@@ -62,7 +62,7 @@ def salvar_leitura(luz):
 
 
 # =====================================
-# INDICADORES
+# DASHBOARD DADOS
 # =====================================
 
 def obter_dados():
@@ -93,7 +93,6 @@ def obter_dados():
 
     consumo = round(total * 0.00045, 3)
     custo = round(consumo * 0.95, 2)
-
     economia = max(0, min(100, round((1000 - luz) / 10)))
 
     return {
@@ -108,7 +107,7 @@ def obter_dados():
 
 
 # =====================================
-# DASHBOARD
+# HOME (DASHBOARD)
 # =====================================
 
 @app.route("/")
@@ -116,154 +115,185 @@ def home():
     d = obter_dados()
 
     return f"""
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{EMPRESA}</title>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{EMPRESA}</title>
 
-        <style>
-            body {{
-                font-family: Arial;
-                margin: 0;
-                background: #f5f7fa;
-            }}
+<style>
+body {{
+    font-family: Arial;
+    margin: 0;
+    background: #f5f7fa;
+}}
 
-            header {{
-                background: #1565c0;
-                color: white;
-                text-align: center;
-                padding: 25px;
-            }}
+header {{
+    background: #1565c0;
+    color: white;
+    text-align: center;
+    padding: 25px;
+}}
 
-            .cards {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
-                gap: 15px;
-                padding: 20px;
-            }}
+.cards {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+    gap: 15px;
+    padding: 20px;
+}}
 
-            .card {{
-                background: white;
-                border-radius: 12px;
-                padding: 20px;
-                box-shadow: 0 2px 8px rgba(0,0,0,.15);
-            }}
+.card {{
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}}
 
-            .valor {{
-                font-size: 28px;
-                font-weight: bold;
-                color: #1565c0;
-            }}
+.valor {{
+    font-size: 28px;
+    font-weight: bold;
+    color: #1565c0;
+}}
 
-            .grafico {{
-                margin: 20px;
-                background: white;
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,.15);
-            }}
-        </style>
-    </head>
+.grafico {{
+    margin: 20px;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}}
+</style>
+</head>
 
-    <body>
+<body>
 
-    <header>
-        <h1>🌿 EcoLight Solutions</h1>
-        <p>Monitoramento Inteligente de Energia</p>
-    </header>
+<header>
+    <h1>🌿 EcoLight Solutions</h1>
+    <p>Monitoramento Inteligente de Energia</p>
+</header>
 
-    <div class="cards">
+<div class="cards">
 
-        <div class="card">
-            <h3>📊 Leituras</h3>
-            <div class="valor">{d['total']}</div>
-        </div>
-
-        <div class="card">
-            <h3>☀️ Luminosidade</h3>
-            <div class="valor">{d['luz']}</div>
-        </div>
-
-        <div class="card">
-            <h3>💡 Status</h3>
-            <div class="valor">{d['status']}</div>
-        </div>
-
-        <div class="card">
-            <h3>⚡ Consumo</h3>
-            <div class="valor">{d['consumo']} kWh</div>
-        </div>
-
-        <div class="card">
-            <h3>💰 Custo</h3>
-            <div class="valor">R$ {d['custo']}</div>
-        </div>
-
-        <div class="card">
-            <h3>🌱 Economia</h3>
-            <div class="valor">{d['economia']}%</div>
-        </div>
-
+    <div class="card">
+        <h3>📊 Leituras</h3>
+        <div class="valor">{d['total']}</div>
     </div>
 
-    <div class="grafico">
-
-        <h2>📈 Gráfico de Luminosidade</h2>
-
-        <canvas id="grafico"></canvas>
-
+    <div class="card">
+        <h3>☀️ Luminosidade</h3>
+        <div class="valor">{d['luz']}</div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <div class="card">
+        <h3>💡 Status</h3>
+        <div class="valor">{d['status']}</div>
+    </div>
 
-    <script>
+    <div class="card">
+        <h3>⚡ Consumo</h3>
+        <div class="valor">{d['consumo']} kWh</div>
+    </div>
 
-    let chart;
+    <div class="card">
+        <h3>💰 Custo</h3>
+        <div class="valor">R$ {d['custo']}</div>
+    </div>
 
-    async function atualizar() {{
+    <div class="card">
+        <h3>🌱 Economia</h3>
+        <div class="valor">{d['economia']}%</div>
+    </div>
 
-        const r = await fetch('/grafico');
-        const dados = await r.json();
+</div>
 
-        if (!chart) {{
+<!-- GRÁFICO 1 -->
+<div class="grafico">
+    <h2>📈 Luminosidade</h2>
+    <canvas id="grafico"></canvas>
+</div>
 
-            chart = new Chart(
-                document.getElementById('grafico'),
-                {{
-                    type: 'line',
-                    data: {{
-                        labels: dados.labels,
-                        datasets: [{{
-                            label: 'Luminosidade',
-                            data: dados.valores,
-                            borderColor: '#1565c0',
-                            backgroundColor: 'rgba(21,101,192,0.2)',
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 3
-                        }}]
-                    }}
+<!-- GRÁFICO 2 -->
+<div class="grafico">
+    <h2>💰 Gastos por Hora</h2>
+    <canvas id="graficoGastos"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+let chart;
+let chartGastos;
+
+async function atualizar() {{
+
+    // =====================
+    // GRAFICO LUZ
+    // =====================
+    const r1 = await fetch('/grafico');
+    const dados1 = await r1.json();
+
+    if (!chart) {{
+        chart = new Chart(
+            document.getElementById('grafico'),
+            {{
+                type: 'line',
+                data: {{
+                    labels: dados1.labels,
+                    datasets: [{{
+                        label: 'Luminosidade',
+                        data: dados1.valores,
+                        borderColor: '#1565c0',
+                        backgroundColor: 'rgba(21,101,192,0.2)',
+                        fill: true,
+                        tension: 0.4
+                    }}]
                 }}
-            );
-
-        }} else {{
-
-            chart.data.labels = dados.labels;
-            chart.data.datasets[0].data = dados.valores;
-            chart.update();
-        }}
+            }}
+        );
+    }} else {{
+        chart.data.labels = dados1.labels;
+        chart.data.datasets[0].data = dados1.valores;
+        chart.update();
     }}
 
-    atualizar();
-    setInterval(atualizar, 5000);
+    // =====================
+    // GRAFICO GASTOS
+    // =====================
+    const r2 = await fetch('/grafico_gastos');
+    const dados2 = await r2.json();
 
-    </script>
+    if (!chartGastos) {{
+        chartGastos = new Chart(
+            document.getElementById('graficoGastos'),
+            {{
+                type: 'bar',
+                data: {{
+                    labels: dados2.labels,
+                    datasets: [{{
+                        label: 'Gastos (R$)',
+                        data: dados2.valores,
+                        backgroundColor: '#f57c00'
+                    }}]
+                }}
+            }}
+        );
+    }} else {{
+        chartGastos.data.labels = dados2.labels;
+        chartGastos.data.datasets[0].data = dados2.valores;
+        chartGastos.update();
+    }}
+}}
 
-    </body>
-    </html>
-    """
+atualizar();
+setInterval(atualizar, 5000);
+
+</script>
+
+</body>
+</html>
+"""
 
 
 # =====================================
@@ -311,7 +341,7 @@ def historico():
 
 
 # =====================================
-# GRÁFICO
+# GRAFICO LUZ
 # =====================================
 
 @app.route("/grafico")
@@ -336,6 +366,47 @@ def grafico():
     return jsonify({
         "labels": [r[1][-8:] for r in registros],
         "valores": [r[0] for r in registros]
+    })
+
+
+# =====================================
+# GRAFICO GASTOS POR HORA
+# =====================================
+
+@app.route("/grafico_gastos")
+def grafico_gastos():
+    criar_banco()
+
+    conn = get_conn()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT luz, data_hora
+        FROM leituras
+        ORDER BY id DESC
+        LIMIT 100
+    """)
+
+    registros = cursor.fetchall()
+    conn.close()
+
+    registros.reverse()
+
+    labels = []
+    valores = []
+
+    for r in registros:
+        hora = r[1][-8:-3]
+        luz = r[0]
+
+        custo = round((luz * 0.00045) * 0.95, 4)
+
+        labels.append(hora)
+        valores.append(custo)
+
+    return jsonify({
+        "labels": labels,
+        "valores": valores
     })
 
 
