@@ -1,3 +1,11 @@
+from flask import Flask, request, jsonify
+from datetime import datetime
+import sqlite3
+import os
+
+EMPRESA = "EcoLight Solutions"
+DB_NAME = "ecolight.db"
+
 app = Flask(__name__)
 @app.route("/")
 def home():
