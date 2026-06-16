@@ -3,23 +3,159 @@ from datetime import datetime
 import sqlite3
 import os
 
+# ==========================
+# CONFIG
+# ==========================
+
+app = Flask(__name__)
+
 EMPRESA = "EcoLight Solutions"
 DB_NAME = "ecolight.db"
 
-app = Flask(__name__)
+
+# ==========================
+# BANCO
+# ==========================
+
+def get_conn():
+    return sqlite3.connect(DB_NAME)
+
+
+def criar_banco():
+
+    conn = get_conn()
+
+    c = conn.cursor()
+
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS leituras(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        luz INTEGER NOT NULL,
+        data_hora TEXT NOT NULL
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+criar_banco()
+
+
+# ==========================
+# SALVAR
+# ==========================
+
+def salvar_leitura(luz):
+
+    conn = get_conn()
+
+    c = conn.cursor()
+
+    horario = datetime.now().strftime(
+        "%d/%m/%Y %H:%M:%S"
+    )
+
+    c.execute(
+        """
+        INSERT INTO leituras
+        (luz,data_hora)
+
+        VALUES (?,?)
+        """,
+        (luz, horario)
+    )
+
+    conn.commit()
+
+    conn.close()
+
+
+# ==========================
+# DASHBOARD
+# ==========================
+
+def obter_dados():
+
+    conn = get_conn()
+
+    c = conn.cursor()
+
+    c.execute(
+        "SELECT COUNT(*) FROM leituras"
+    )
+
+    total = c.fetchone()[0]
+
+    c.execute("""
+        SELECT luz,data_hora
+        FROM leituras
+        ORDER BY id DESC
+        LIMIT 1
+    """)
+
+    ultima = c.fetchone()
+
+    conn.close()
+
+    if ultima:
+
+        luz = ultima[0]
+        horario = ultima[1]
+
+    else:
+
+        luz = 0
+        horario = "-"
+
+    consumo = round(
+        total * 0.00045,
+        3
+    )
+
+    economia = max(
+        0,
+        min(
+            100,
+            round(
+                (1000 - luz) / 10
+            )
+        )
+    )
+
+    return {
+        "luz": luz,
+        "horario": horario,
+        "consumo": consumo,
+        "economia": economia
+    }
+
+
+# ==========================
+# API CARDS
+# ==========================
+
+@app.route("/api/cards")
+def cards():
+
+    return jsonify(
+        obter_dados()
+    )
+
+
+# ==========================
+# HOME
+# ==========================
+
 @app.route("/")
 def home():
 
     d = obter_dados()
 
     return f"""
-<!DOCTYPE html>
-<html lang="pt-BR">
+<html>
 
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
 
 <title>{EMPRESA}</title>
 
@@ -27,57 +163,36 @@ def home():
 
 <style>
 
-*{{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Segoe UI;
-}}
-
 body{{
+margin:0;
+font-family:Segoe UI;
 background:#eef3fb;
 }}
 
 header{{
-background:linear-gradient(135deg,#1565c0,#1e88e5);
-color:white;
 padding:30px;
 text-align:center;
-}}
 
-header h1{{
-font-size:40px;
-}}
+background:
+linear-gradient(
+135deg,
+#1565c0,
+#1e88e5
+);
 
-header p{{
-margin-top:10px;
-opacity:.9;
-}}
-
-.menu{{
-display:flex;
-justify-content:center;
-gap:40px;
-
-background:white;
-
-padding:15px;
-
-box-shadow:0 2px 10px rgba(0,0,0,.08);
-}}
-
-.menu div{{
-cursor:pointer;
-font-weight:600;
+color:white;
 }}
 
 .cards{{
 display:grid;
 
 grid-template-columns:
-repeat(auto-fit,minmax(240px,1fr));
+repeat(
+auto-fit,
+minmax(240px,1fr)
+);
 
-gap:18px;
+gap:20px;
 
 padding:25px;
 }}
@@ -85,28 +200,15 @@ padding:25px;
 .card{{
 background:white;
 
-border-radius:20px;
-
 padding:25px;
+
+border-radius:20px;
 
 box-shadow:
 0 10px 25px rgba(0,0,0,.08);
-
-transition:.3s;
-}}
-
-.card:hover{{
-transform:translateY(-6px);
-}}
-
-.titulo{{
-font-size:15px;
-color:#666;
 }}
 
 .valor{{
-margin-top:10px;
-
 font-size:34px;
 
 font-weight:bold;
@@ -114,28 +216,17 @@ font-weight:bold;
 color:#1565c0;
 }}
 
-.status{{
-display:flex;
-align-items:center;
-gap:10px;
-}}
-
 .dot{{
 width:18px;
 height:18px;
 
-border-radius:50%;
-
 background:#00c853;
 
-box-shadow:
-0 0 20px #00c853;
+border-radius:50%;
 
-animation:pulse 1.4s infinite;
-}}
+display:inline-block;
 
-@keyframes pulse{{
-50%{{opacity:.5}}
+margin-right:10px;
 }}
 
 .box{{
@@ -143,34 +234,9 @@ margin:25px;
 
 background:white;
 
-border-radius:20px;
-
 padding:25px;
 
-box-shadow:
-0 10px 25px rgba(0,0,0,.08);
-}}
-
-canvas{{
-max-height:350px;
-}}
-
-.toast{{
-position:fixed;
-
-top:20px;
-
-right:20px;
-
-background:#1565c0;
-
-color:white;
-
-padding:18px;
-
-border-radius:12px;
-
-display:none;
+border-radius:20px;
 }}
 
 </style>
@@ -181,35 +247,25 @@ display:none;
 
 <header>
 
-<h1>🌿 EcoLight Solutions</h1>
+<h1>
+🌿 EcoLight Solutions
+</h1>
 
-<p>Monitoramento Inteligente de Energia</p>
+<p>
+Monitoramento Inteligente
+</p>
 
 </header>
-
-<div class="menu">
-
-<div>📊 Dashboard</div>
-
-<div>🕒 Histórico</div>
-
-<div>⚙ Configurações</div>
-
-</div>
 
 <div class="cards">
 
 <div class="card">
 
-<div class="titulo">
-
 Sistema
 
-</div>
+<div class="valor">
 
-<div class="valor status">
-
-<div class="dot"></div>
+<span class="dot"></span>
 
 Online
 
@@ -219,13 +275,10 @@ Online
 
 <div class="card">
 
-<div class="titulo">
+Luminosidade
 
-☀ Luminosidade
-
-</div>
-
-<div class="valor"
+<div
+class="valor"
 id="luz">
 
 {d["luz"]}
@@ -236,13 +289,10 @@ id="luz">
 
 <div class="card">
 
-<div class="titulo">
+Consumo
 
-⚡ Consumo
-
-</div>
-
-<div class="valor"
+<div
+class="valor"
 id="consumo">
 
 {d["consumo"]}
@@ -255,13 +305,10 @@ kWh
 
 <div class="card">
 
-<div class="titulo">
+Economia
 
-🌱 Economia
-
-</div>
-
-<div class="valor"
+<div
+class="valor"
 id="economia">
 
 {d["economia"]}%
@@ -272,39 +319,16 @@ id="economia">
 
 <div class="card">
 
-<div class="titulo">
+Atualização
 
-🕒 Última atualização
+<div
+class="valor"
 
-</div>
-
-<div class="valor"
-
-style="font-size:22px"
+style="font-size:20px"
 
 id="hora">
 
 {d["horario"]}
-
-</div>
-
-</div>
-
-<div class="card">
-
-<div class="titulo">
-
-🔔 Alertas
-
-</div>
-
-<div class="valor"
-
-style="font-size:22px"
-
-id="alerta">
-
-Nenhum
 
 </div>
 
@@ -316,146 +340,81 @@ Nenhum
 
 <h2>
 
-📈 Luminosidade em Tempo Real
+📈 Luminosidade
 
 </h2>
 
-<br>
+<canvas
+id="grafico">
 
-<canvas id="grafico"></canvas>
+</canvas>
 
-</div>
-
-<div class="toast"
-id="toast">
-Novo dado recebido
 </div>
 
 <script>
 
 let chart;
 
-function aviso(txt){{
-let t=
-document.getElementById(
-"toast"
-);
-
-t.innerText=
-txt;
-
-t.style.display=
-"block";
-
-setTimeout(
-()=>{{
-t.style.display=
-"none";
-}},
-3000
-);
-}}
-
 async function atualizar(){{
 
-const cards=
+const r=
 await fetch(
 "/api/cards"
 );
 
 const d=
-await cards.json();
+await r.json();
 
-document
-.getElementById("luz")
-.innerText=
+luz.innerText=
 d.luz;
 
-document
-.getElementById("consumo")
-.innerText=
-d.consumo+
-" kWh";
+consumo.innerText=
+d.consumo+" kWh";
 
-document
-.getElementById("economia")
-.innerText=
-d.economia+
-"%";
+economia.innerText=
+d.economia+"%";
 
-document
-.getElementById("hora")
-.innerText=
+hora.innerText=
 d.horario;
 
-if(
-d.luz<300
-){{
-document
-.getElementById(
-"alerta"
-)
-.innerText=
-"Baixa luminosidade";
-}}
-else{{
-document
-.getElementById(
-"alerta"
-)
-.innerText=
-"Nenhum";
-}}
-
-const r=
+const g=
 await fetch(
 "/grafico"
 );
 
 const dados=
-await r.json();
+await g.json();
 
 if(!chart){{
 
 chart=
 new Chart(
-document.getElementById(
-"grafico"
-),{{
+grafico,
+{{
 
 type:"line",
 
 data:{{
+
 labels:
 dados.labels,
 
 datasets:[{{
-
-label:
-"Luminosidade",
 
 data:
 dados.valores,
 
 fill:true,
 
-tension:.5,
-
-borderWidth:4,
-
-backgroundColor:
-"rgba(21,101,192,.18)",
-
-borderColor:
-"#1565c0",
-
-pointRadius:0
+tension:.5
 
 }}]
 
 }}
 
-}});
+}}
+
+);
 
 }}
 
@@ -470,10 +429,6 @@ dados.valores;
 chart.update();
 
 }}
-
-aviso(
-"Dados atualizados"
-);
 
 }}
 
@@ -491,3 +446,78 @@ atualizar,
 </html>
 
 """
+
+
+# ==========================
+# RECEBER ESP
+# ==========================
+
+@app.route("/dados")
+def receber():
+
+    luz = request.args.get("luz")
+
+    if not luz:
+        return "SEM DADOS"
+
+    salvar_leitura(
+        int(luz)
+    )
+
+    return "OK"
+
+
+# ==========================
+# GRAFICO
+# ==========================
+
+@app.route("/grafico")
+def grafico():
+
+    conn = get_conn()
+
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT luz,data_hora
+        FROM leituras
+        ORDER BY id DESC
+        LIMIT 20
+    """)
+
+    dados = c.fetchall()
+
+    conn.close()
+
+    dados.reverse()
+
+    return jsonify({
+
+        "labels":[
+            x[1][-8:]
+            for x in dados
+        ],
+
+        "valores":[
+            x[0]
+            for x in dados
+        ]
+
+    })
+
+
+# ==========================
+# START
+# ==========================
+
+if __name__ == "__main__":
+
+    app.run(
+        host="0.0.0.0",
+        port=int(
+            os.environ.get(
+                "PORT",
+                5000
+            )
+        )
+    )
