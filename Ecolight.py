@@ -4,198 +4,209 @@ import sqlite3
 import requests
 import os
 
+# ==========================
+# CONFIG
+# ==========================
+
 app = Flask(__name__)
 
 EMPRESA = "EcoLight Solutions"
 DB_NAME = "ecolight.db"
 CIDADE = "Passo Fundo"
 
+
+# ==========================
+# BANCO
+# ==========================
+
 def get_conn():
-return sqlite3.connect(DB_NAME)
+    return sqlite3.connect(DB_NAME)
+
 
 def criar_banco():
 
-```
-conn = get_conn()
+    conn = get_conn()
 
-c = conn.cursor()
+    c = conn.cursor()
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS leituras(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    luz INTEGER,
-    data_hora TEXT
-)
-""")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS leituras(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        luz INTEGER,
+        data_hora TEXT
+    )
+    """)
 
-conn.commit()
+    conn.commit()
 
-conn.close()
-```
+    conn.close()
+
 
 criar_banco()
 
+
+# ==========================
+# SALVAR
+# ==========================
+
 def salvar_leitura(luz):
 
-```
-conn = get_conn()
+    conn = get_conn()
 
-c = conn.cursor()
+    c = conn.cursor()
 
-horario = datetime.now().strftime(
-    "%d/%m/%Y %H:%M:%S"
-)
-
-c.execute(
-    """
-    INSERT INTO leituras
-    (luz,data_hora)
-
-    VALUES (?,?)
-    """,
-    (
-        luz,
-        horario
+    horario = datetime.now().strftime(
+        "%d/%m/%Y %H:%M:%S"
     )
-)
 
-conn.commit()
+    c.execute(
+        """
+        INSERT INTO leituras
+        (luz,data_hora)
 
-conn.close()
-```
+        VALUES (?,?)
+        """,
+        (luz, horario)
+    )
+
+    conn.commit()
+
+    conn.close()
+
+
+# ==========================
+# DASHBOARD
+# ==========================
 
 def obter_dados():
 
-```
-conn = get_conn()
+    conn = get_conn()
 
-c = conn.cursor()
+    c = conn.cursor()
 
-c.execute(
-    "SELECT COUNT(*) FROM leituras"
-)
+    c.execute(
+        "SELECT COUNT(*) FROM leituras"
+    )
 
-total = c.fetchone()[0]
+    total = c.fetchone()[0]
 
-c.execute("""
-SELECT luz,data_hora
-FROM leituras
-ORDER BY id DESC
-LIMIT 1
-""")
+    c.execute("""
+        SELECT luz,data_hora
+        FROM leituras
+        ORDER BY id DESC
+        LIMIT 1
+    """)
 
-ultima = c.fetchone()
+    ultima = c.fetchone()
 
-conn.close()
+    conn.close()
 
-if ultima:
+    if ultima:
 
-    luz = ultima[0]
+        luz = ultima[0]
 
-    horario = ultima[1]
+        horario = ultima[1]
 
-else:
+    else:
 
-    luz = 0
+        luz = 0
 
-    horario = "-"
+        horario = "-"
 
-return {
-
-    "luz": luz,
-
-    "horario": horario,
-
-    "consumo":
-    round(
-        total*0.00045,
+    consumo = round(
+        total * 0.00045,
         3
-    ),
+    )
 
-    "economia":
-    max(
+    economia = max(
         0,
         min(
             100,
             round(
-                (1000-luz)/10
+                (1000 - luz) / 10
             )
         )
     )
 
-}
-```
+    return {
+        "luz": luz,
+        "horario": horario,
+        "consumo": consumo,
+        "economia": economia
+    }
+
+
+# ==========================
+# CLIMA
+# ==========================
 
 def obter_clima():
 
-```
-try:
+    try:
 
-    r = requests.get(
-        f"https://wttr.in/{CIDADE}?format=j1",
-        timeout=5
-    )
+        r = requests.get(
+            f"https://wttr.in/{CIDADE}?format=j1",
+            timeout=5
+        )
 
-    dados = r.json()
+        dados = r.json()
 
-    atual = dados[
-        "current_condition"
-    ][0]
+        atual = dados["current_condition"][0]
 
-    return {
+        return {
 
-        "temp":
-        atual["temp_C"],
+            "temp": atual["temp_C"],
 
-        "umidade":
-        atual["humidity"],
+            "umidade": atual["humidity"],
 
-        "descricao":
-        atual[
-            "weatherDesc"
-        ][0]["value"]
+            "descricao":
+            atual["weatherDesc"][0]["value"]
 
-    }
+        }
 
-except:
+    except:
 
-    return {
+        return {
 
-        "temp":"--",
+            "temp": "--",
 
-        "umidade":"--",
+            "umidade": "--",
 
-        "descricao":"Sem dados"
+            "descricao": "Indisponível"
 
-    }
-```
+        }
+
+
+# ==========================
+# APIs
+# ==========================
 
 @app.route("/api/cards")
 def cards():
 
-```
-return jsonify(
-    obter_dados()
-)
-```
+    return jsonify(
+        obter_dados()
+    )
+
 
 @app.route("/api/clima")
 def clima():
 
-```
-return jsonify(
-    obter_clima()
-)
-```
+    return jsonify(
+        obter_clima()
+    )
+
+
+# ==========================
+# HOME
+# ==========================
 
 @app.route("/")
 def home():
 
-```
-d = obter_dados()
+    d = obter_dados()
 
-return f"""
-```
+    return f"""
 
 <html>
 
@@ -203,9 +214,7 @@ return f"""
 
 <title>{EMPRESA}</title>
 
-<script src=
-"https://cdn.jsdelivr.net/npm/chart.js">
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 
@@ -217,71 +226,35 @@ background:#eef3fb;
 
 header{{
 padding:30px;
-
+background:#1565c0;
 color:white;
-
 text-align:center;
-
-background:
-linear-gradient(
-135deg,
-#1565c0,
-#1e88e5
-);
 }}
 
 .cards{{
 display:grid;
-
 grid-template-columns:
-repeat(
-auto-fit,
-minmax(250px,1fr)
-);
-
+repeat(auto-fit,minmax(250px,1fr));
 gap:20px;
-
 padding:25px;
 }}
 
 .card{{
 background:white;
-
 padding:25px;
-
 border-radius:20px;
-
-box-shadow:
-0 10px 25px rgba(0,0,0,.08);
 }}
 
 .valor{{
 font-size:32px;
-
 font-weight:bold;
-
 color:#1565c0;
 }}
 
-.dot{{
-width:18px;
-
-height:18px;
-
-background:#00c853;
-
-display:inline-block;
-
-border-radius:50%;
-}}
-
 .box{{
-margin:25px;
-
-padding:25px;
-
 background:white;
-
+margin:25px;
+padding:25px;
 border-radius:20px;
 }}
 
@@ -293,13 +266,7 @@ border-radius:20px;
 
 <header>
 
-<h1>
-🌿 EcoLight Solutions
-</h1>
-
-<p>
-Monitoramento Inteligente
-</p>
+<h1>🌿 {EMPRESA}</h1>
 
 </header>
 
@@ -311,9 +278,7 @@ Sistema
 
 <div class="valor">
 
-<span class="dot"></span>
-
-Online
+🟢 Online
 
 </div>
 
@@ -323,9 +288,7 @@ Online
 
 Luminosidade
 
-<div
-class="valor"
-id="luz">
+<div class="valor" id="luz">
 
 {d["luz"]}
 
@@ -337,9 +300,7 @@ id="luz">
 
 Consumo
 
-<div
-class="valor"
-id="consumo">
+<div class="valor" id="consumo">
 
 {d["consumo"]}
 
@@ -353,9 +314,7 @@ kWh
 
 Economia
 
-<div
-class="valor"
-id="economia">
+<div class="valor" id="economia">
 
 {d["economia"]}%
 
@@ -365,37 +324,17 @@ id="economia">
 
 <div class="card">
 
-Clima
+🌤 Clima
 
-<div
-class="valor"
-id="temp">
+<div class="valor" id="temp">
 
 --
 
 </div>
 
-<div
-id="clima">
+<div id="clima">
 
-Carregando...
-
-</div>
-
-</div>
-
-<div class="card">
-
-Alerta
-
-<div
-class="valor"
-
-style="font-size:20px"
-
-id="alerta">
-
-Normal
+Carregando
 
 </div>
 
@@ -405,16 +344,7 @@ Normal
 
 <div class="box">
 
-<h2>
-
-📈 Luminosidade
-
-</h2>
-
-<canvas
-id="grafico">
-
-</canvas>
+<canvas id="grafico"></canvas>
 
 </div>
 
@@ -424,120 +354,36 @@ let chart;
 
 async function atualizar(){{
 
-const r=
-await fetch(
-"/api/cards"
-);
+let r=
+await fetch("/api/cards");
 
-const d=
+let d=
 await r.json();
 
-luz.innerText=
-d.luz;
+luz.innerText=d.luz;
 
 consumo.innerText=
-d.consumo+
-" kWh";
+d.consumo+" kWh";
 
 economia.innerText=
-d.economia+
-"%";
+d.economia+"%";
 
-const c=
-await fetch(
-"/api/clima"
-);
+let c=
+await fetch("/api/clima");
 
-const clima=
+let clima=
 await c.json();
 
 temp.innerText=
-clima.temp+
-"°C";
+clima.temp+"°C";
 
 document
-.getElementById(
-"clima"
-)
+.getElementById("clima")
 .innerText=
 
 clima.descricao+
-
-" • "+
-
-clima.umidade+
-
-"%";
-
-if(
-d.luz<300
-){{
-alerta.innerText=
-"⚠ Pouca Luz";
-}}
-else if(
-d.luz>800
-){{
-alerta.innerText=
-"☀ Alta Luz";
-}}
-else{{
-alerta.innerText=
-"✓ Normal";
-}}
-
-const g=
-await fetch(
-"/grafico"
-);
-
-const dados=
-await g.json();
-
-if(!chart){{
-
-chart=
-new Chart(
-grafico,
-{{
-
-type:"line",
-
-data:{{
-
-labels:
-dados.labels,
-
-datasets:[{{
-
-data:
-dados.valores,
-
-fill:true,
-
-tension:.5
-
-}}]
-
-}}
-
-}}
-
-);
-
-}}
-
-else{{
-
-chart.data.labels=
-dados.labels;
-
-chart.data.datasets[0].data=
-dados.valores;
-
-chart.update();
-
-}}
+" | "+
+clima.umidade+"%";
 
 }}
 
@@ -556,78 +402,42 @@ atualizar,
 
 """
 
+
+# ==========================
+# ESP8266
+# ==========================
+
 @app.route("/dados")
 def receber():
 
-```
-luz =
-request.args.get(
-    "luz"
-)
+    luz = request.args.get("luz")
 
-if not luz:
+    if not luz:
 
-    return "SEM DADOS"
+        return "SEM DADOS"
 
-salvar_leitura(
-    int(luz)
-)
-
-return "OK"
-```
-
-@app.route("/grafico")
-def grafico():
-
-```
-conn =
-get_conn()
-
-c =
-conn.cursor()
-
-c.execute("""
-SELECT luz,data_hora
-FROM leituras
-ORDER BY id DESC
-LIMIT 20
-""")
-
-dados =
-c.fetchall()
-
-conn.close()
-
-dados.reverse()
-
-return jsonify({
-
-    "labels":[
-        x[1][-8:]
-        for x in dados
-    ],
-
-    "valores":[
-        x[0]
-        for x in dados
-    ]
-
-})
-```
-
-if **name** == "**main**":
-
-```
-app.run(
-
-    host="0.0.0.0",
-
-    port=int(
-        os.environ.get(
-            "PORT",
-            5000
-        )
+    salvar_leitura(
+        int(luz)
     )
 
-)
-```
+    return "OK"
+
+
+# ==========================
+# START
+# ==========================
+
+if __name__ == "__main__":
+
+    app.run(
+
+        host="0.0.0.0",
+
+        port=int(
+            os.environ.get(
+                "PORT",
+                5000
+            )
+        )
+
+    )
