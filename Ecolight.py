@@ -145,7 +145,7 @@ def obter_clima():
     try:
 
         r = requests.get(
-            f"https://wttr.in/{CIDADE}?format=j1",
+            f"https://wttr.in/{Itajubá MG}?format=j1",
             timeout=5
         )
 
@@ -226,23 +226,38 @@ background:#eef3fb;
 
 header{{
 padding:30px;
-background:#1565c0;
-color:white;
 text-align:center;
+background:linear-gradient(
+135deg,
+#1565c0,
+#1e88e5
+);
+color:white;
 }}
 
 .cards{{
 display:grid;
+
 grid-template-columns:
-repeat(auto-fit,minmax(250px,1fr));
+repeat(
+auto-fit,
+minmax(240px,1fr)
+);
+
 gap:20px;
+
 padding:25px;
 }}
 
 .card{{
 background:white;
+
 padding:25px;
+
 border-radius:20px;
+
+box-shadow:
+0 10px 25px rgba(0,0,0,.08);
 }}
 
 .valor{{
@@ -252,10 +267,52 @@ color:#1565c0;
 }}
 
 .box{{
-background:white;
 margin:25px;
+
+background:white;
+
 padding:25px;
+
 border-radius:20px;
+}}
+
+.dot{{
+width:18px;
+height:18px;
+
+background:#00c853;
+
+border-radius:50%;
+
+display:inline-block;
+
+margin-right:10px;
+
+animation:pulse 1.5s infinite;
+}}
+
+@keyframes pulse{{
+50%{{opacity:.4}}
+}}
+
+.toast{{
+position:fixed;
+
+top:20px;
+
+right:20px;
+
+background:#1565c0;
+
+color:white;
+
+padding:18px;
+
+border-radius:12px;
+
+display:none;
+
+z-index:999;
 }}
 
 </style>
@@ -264,9 +321,25 @@ border-radius:20px;
 
 <body>
 
+<div class="toast" id="toast">
+
+Atualizando...
+
+</div>
+
 <header>
 
-<h1>🌿 {EMPRESA}</h1>
+<h1>
+
+🌿 EcoLight Solutions
+
+</h1>
+
+<p>
+
+Monitoramento Inteligente
+
+</p>
 
 </header>
 
@@ -278,7 +351,9 @@ Sistema
 
 <div class="valor">
 
-🟢 Online
+<span class="dot"></span>
+
+Online
 
 </div>
 
@@ -286,9 +361,11 @@ Sistema
 
 <div class="card">
 
-Luminosidade
+☀ Luminosidade
 
-<div class="valor" id="luz">
+<div
+class="valor"
+id="luz">
 
 {d["luz"]}
 
@@ -298,9 +375,11 @@ Luminosidade
 
 <div class="card">
 
-Consumo
+⚡ Consumo
 
-<div class="valor" id="consumo">
+<div
+class="valor"
+id="consumo">
 
 {d["consumo"]}
 
@@ -312,9 +391,11 @@ kWh
 
 <div class="card">
 
-Economia
+🌱 Economia
 
-<div class="valor" id="economia">
+<div
+class="valor"
+id="economia">
 
 {d["economia"]}%
 
@@ -326,15 +407,35 @@ Economia
 
 🌤 Clima
 
-<div class="valor" id="temp">
+<div
+class="valor"
+id="temp">
 
 --
 
 </div>
 
-<div id="clima">
+<div
+id="clima">
 
-Carregando
+Carregando...
+
+</div>
+
+</div>
+
+<div class="card">
+
+🔔 Notificação
+
+<div
+class="valor"
+
+style="font-size:20px"
+
+id="alerta">
+
+Nenhuma
 
 </div>
 
@@ -344,7 +445,16 @@ Carregando
 
 <div class="box">
 
-<canvas id="grafico"></canvas>
+<h2>
+
+📈 Histórico da Luminosidade
+
+</h2>
+
+<canvas
+id="grafico">
+
+</canvas>
 
 </div>
 
@@ -352,38 +462,175 @@ Carregando
 
 let chart;
 
+function notificar(texto){{
+
+let t=
+document.getElementById(
+"toast"
+);
+
+t.innerText=
+texto;
+
+t.style.display=
+"block";
+
+setTimeout(
+()=>{{
+t.style.display=
+"none";
+}},
+2500
+);
+
+}}
+
 async function atualizar(){{
 
-let r=
-await fetch("/api/cards");
+const r=
+await fetch(
+"/api/cards"
+);
 
-let d=
+const d=
 await r.json();
 
-luz.innerText=d.luz;
+luz.innerText=
+d.luz;
 
 consumo.innerText=
-d.consumo+" kWh";
+d.consumo+
+" kWh";
 
 economia.innerText=
-d.economia+"%";
+d.economia+
+"%";
 
-let c=
-await fetch("/api/clima");
+const c=
+await fetch(
+"/api/clima"
+);
 
-let clima=
+const clima=
 await c.json();
 
 temp.innerText=
-clima.temp+"°C";
+clima.temp+
+"°C";
 
 document
-.getElementById("clima")
+.getElementById(
+"clima"
+)
 .innerText=
 
 clima.descricao+
-" | "+
-clima.umidade+"%";
+
+" • "+
+
+clima.umidade+
+
+"%";
+
+if(
+Number(clima.temp)>=35
+){{
+alerta.innerText=
+"🔥 Calor alto";
+
+notificar(
+"Temperatura elevada"
+);
+
+}}
+
+else if(
+d.luz<300
+){{
+alerta.innerText=
+"⚠ Ambiente escuro";
+
+notificar(
+"Baixa luminosidade"
+);
+
+}}
+
+else{{
+
+alerta.innerText=
+"✓ Normal";
+
+}}
+
+const g=
+await fetch(
+"/grafico"
+);
+
+const dados=
+await g.json();
+
+if(!chart){{
+
+chart=
+new Chart(
+
+document
+.getElementById(
+"grafico"
+),
+
+{{
+
+type:"line",
+
+data:{{
+
+labels:
+dados.labels,
+
+datasets:[{{
+
+label:
+"Luminosidade",
+
+data:
+dados.valores,
+
+fill:true,
+
+tension:.4,
+
+borderWidth:3,
+
+backgroundColor:
+"rgba(21,101,192,.15)",
+
+borderColor:
+"#1565c0"
+
+}}]
+
+}}
+
+}}
+
+);
+
+}}
+
+else{{
+
+chart.data.labels=
+dados.labels;
+
+chart.data.datasets[0].data=
+dados.valores;
+
+chart.update();
+
+}}
 
 }}
 
@@ -401,43 +648,3 @@ atualizar,
 </html>
 
 """
-
-
-# ==========================
-# ESP8266
-# ==========================
-
-@app.route("/dados")
-def receber():
-
-    luz = request.args.get("luz")
-
-    if not luz:
-
-        return "SEM DADOS"
-
-    salvar_leitura(
-        int(luz)
-    )
-
-    return "OK"
-
-
-# ==========================
-# START
-# ==========================
-
-if __name__ == "__main__":
-
-    app.run(
-
-        host="0.0.0.0",
-
-        port=int(
-            os.environ.get(
-                "PORT",
-                5000
-            )
-        )
-
-    )
