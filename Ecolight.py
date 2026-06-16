@@ -12,7 +12,7 @@ app = Flask(__name__)
 
 EMPRESA = "EcoLight Solutions"
 DB_NAME = "ecolight.db"
-CIDADE = "Passo Fundo"
+CIDADE = "Itajuba MG"
 
 
 # ==========================
@@ -145,7 +145,7 @@ def obter_clima():
     try:
 
         r = requests.get(
-            f"https://wttr.in/{Itajubá MG}?format=j1",
+            f"https://wttr.in/{CIDADE}?format=j1",
             timeout=5
         )
 
