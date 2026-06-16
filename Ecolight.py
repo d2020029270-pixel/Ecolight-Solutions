@@ -4,7 +4,7 @@ import sqlite3
 import requests
 import os
 
-app = Flask(**name**)
+app = Flask(__name__)
 
 EMPRESA = "EcoLight Solutions"
 DB_NAME = "ecolight.db"
