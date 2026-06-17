@@ -1,534 +1,95 @@
-from flask import Flask, request, jsonify
-from datetime import datetime
-import sqlite3
-import requests
-import os
+from flask import Flask, render_template_string, jsonify, request
 
 app = Flask(__name__)
 
-EMPRESA = "EcoLight Solutions"
-DB_NAME = "ecolight.db"
-CIDADE = "Itajuba MG"
-
-
-# ======================
-# BANCO
-# ======================
-
-def get_conn():
-    return sqlite3.connect(DB_NAME)
-
-
-def criar_banco():
-
-    conn = get_conn()
-
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS leituras(
-        id INTEGER PRIMARY KEY,
-        luz INTEGER,
-        data_hora TEXT
-    )
-    """)
-
-    conn.commit()
-
-    conn.close()
-
-
-criar_banco()
-
-
-# ======================
-# SALVAR
-# ======================
-
-def salvar_leitura(luz):
-
-    conn = get_conn()
-
-    conn.execute(
-        """
-        INSERT INTO leituras
-        (luz,data_hora)
-
-        VALUES (?,?)
-        """,
-        (
-            luz,
-            datetime.now().strftime(
-                "%d/%m/%Y %H:%M:%S"
-            )
-        )
-    )
-
-    conn.commit()
-
-    conn.close()
-
-
-# ======================
-# DASHBOARD
-# ======================
-
-def obter_dados():
-
-    conn = get_conn()
-
-    c = conn.cursor()
-
-    c.execute("""
-    SELECT luz,data_hora
-    FROM leituras
-    ORDER BY id DESC
-    LIMIT 1
-    """)
-
-    ultima = c.fetchone()
-
-    c.execute(
-        "SELECT COUNT(*) FROM leituras"
-    )
-
-    total = c.fetchone()[0]
-
-    conn.close()
-
-    if ultima:
-
-        luz = ultima[0]
-
-        horario = ultima[1]
-
-        try:
-
-            diff = (
-                datetime.now()
-                -
-                datetime.strptime(
-                    horario,
-                    "%d/%m/%Y %H:%M:%S"
-                )
-            ).seconds
-
-            online = diff < 15
-
-        except:
-
-            online = False
-
-    else:
-
-        luz = 0
-        horario = "-"
-        online = False
-
-    return {
-
-        "luz": luz,
-
-        "horario": horario,
-
-        "consumo":
-        round(
-            total*0.00045,
-            3
-        ),
-
-        "economia":
-        max(
-            0,
-            min(
-                100,
-                round(
-                    (1000-luz)/10
-                )
-            )
-        ),
-
-        "online":
-        online
-
-    }
-
-
-# ======================
-# CLIMA
-# ======================
-
-def obter_clima():
-
-    try:
-
-        r = requests.get(
-            f"https://wttr.in/{CIDADE}?format=j1",
-            timeout=5
-        )
-
-        dados = r.json()
-
-        atual = dados["current_condition"][0]
-
-        chuva = dados[
-            "weather"
-        ][0][
-            "hourly"
-        ][0].get(
-            "chanceofrain",
-            "--"
-        )
-
-        return {
-
-            "temp":
-            atual["temp_C"],
-
-            "descricao":
-            atual[
-                "weatherDesc"
-            ][0]["value"],
-
-            "umidade":
-            atual["humidity"],
-
-            "chuva":
-            chuva
-
-        }
-
-    except:
-
-        return {
-
-            "temp":"--",
-            "descricao":"Sem dados",
-            "umidade":"--",
-            "chuva":"--"
-
-        }
-
-
-# ======================
-# APIs
-# ======================
-
-@app.route("/api/cards")
-def cards():
-    return jsonify(
-        obter_dados()
-    )
-
-
-@app.route("/api/clima")
-def clima():
-    return jsonify(
-        obter_clima()
-    )
-
-
-# ======================
-# HOME
-# ======================
+# Variável global para armazenar a última leitura do sensor
+dados_sensor = {"luz": 0}
+
+@app.route("/update")
+def update():
+    """Rota para o ESP8266 enviar dados"""
+    luz = request.args.get("luz", 0)
+    dados_sensor["luz"] = luz
+    return "OK"
+
+@app.route("/api/get-luz")
+def get_luz():
+    """Rota para o site consultar o valor"""
+    return jsonify({"luz": dados_sensor["luz"]})
 
 @app.route("/")
-def home():
-
-    d = obter_dados()
-
-    return f"""
-<!DOCTYPE html>
-
-<html>
-
-<head>
-
-<title>{EMPRESA}</title>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<style>
-
-body{{
-margin:0;
-font-family:Segoe UI;
-background:#eef3fb;
-}}
-
-header{{
-padding:30px;
-text-align:center;
-background:linear-gradient(135deg,#1565c0,#1e88e5);
-color:white;
-}}
-
-.cards{{
-display:grid;
-grid-template-columns:
-repeat(auto-fit,minmax(240px,1fr));
-gap:20px;
-padding:25px;
-}}
-
-.card{{
-background:white;
-padding:25px;
-border-radius:20px;
-box-shadow:0 10px 25px rgba(0,0,0,.08);
-}}
-
-.valor{{
-font-size:32px;
-font-weight:bold;
-color:#1565c0;
-}}
-
-.online{{color:#00c853;}}
-.offline{{color:#d50000;}}
-
-.box{{
-margin:25px;
-padding:25px;
-background:white;
-border-radius:20px;
-}}
-
-.toast{{
-position:fixed;
-top:20px;
-right:20px;
-background:#1565c0;
-color:white;
-padding:15px;
-border-radius:12px;
-display:none;
-}}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="toast" id="toast"></div>
-
-<header>
-
-<h1>🌿 EcoLight Solutions</h1>
-
-<p>Monitoramento Inteligente</p>
-
-</header>
-
-<div class="cards">
-
-<div class="card">
-Sistema
-<div class="valor" id="status">
-{"🟢 Online" if d["online"] else "🔴 Offline"}
-</div>
-</div>
-
-<div class="card">
-☀ Luminosidade
-<div class="valor" id="luz">
-{d["luz"]}
-</div>
-</div>
-
-<div class="card">
-⚡ Consumo
-<div class="valor" id="consumo">
-{d["consumo"]} kWh
-</div>
-</div>
-
-<div class="card">
-🌱 Economia
-<div class="valor" id="economia">
-{d["economia"]}%
-</div>
-</div>
-
-<div class="card">
-🌤 Clima
-<div class="valor" id="temp">--</div>
-<div id="clima">
-Carregando...
-</div>
-</div>
-
-<div class="card">
-🔔 Notificação
-<div class="valor" id="alerta">
-Normal
-</div>
-</div>
-
-</div>
-
-<div class="box">
-
-<h2>📈 Histórico da Luminosidade</h2>
-
-<canvas id="grafico"></canvas>
-
-</div>
-
-<script>
-
-let chart;
-
-function toast(txt){{
-let t=document.getElementById("toast");
-
-t.innerText=txt;
-
-t.style.display="block";
-
-setTimeout(()=>{{
-t.style.display="none";
-}},3000);
-
-}}
-
-async function atualizar(){{
-
-let r=
-await fetch("/api/cards");
-
-let d=
-await r.json();
-
-document.getElementById(
-"luz"
-).innerText=d.luz;
-
-document.getElementById(
-"consumo"
-).innerText=
-d.consumo+" kWh";
-
-document.getElementById(
-"economia"
-).innerText=
-d.economia+"%";
-
-document.getElementById(
-"status"
-).innerHTML=
-d.online
-?
-"🟢 Online"
-:
-"🔴 Offline";
-
-
-let climaReq=
-await fetch(
-"/api/clima"
-);
-
-let clima=
-await climaReq.json();
-
-temp.innerText=
-clima.temp+"°C";
-
-document.getElementById(
-"clima"
-).innerText=
-clima.descricao+
-" • "+
-clima.umidade+
-"%";
-
-if(
-clima.chuva==="Sim"
-){{
-alerta.innerText=
-"☔ Chuva prevista";
-}}
-
-else if(
-d.luz<300
-){{
-alerta.innerText=
-"⚠ Baixa luz";
-}}
-
-else{{
-alerta.innerText=
-"✓ Normal";
-}}
-
-
-let g=
-await fetch(
-"/grafico"
-);
-
-let dados=
-await g.json();
-
-if(!chart){{
-
-chart=
-new Chart(
-
-document.getElementById(
-"grafico"
-),
-
-{{
-
-type:"line",
-
-data:{{
-labels:dados.labels,
-
-datasets:[{{
-label:"LDR",
-
-data:dados.valores,
-
-fill:true,
-
-tension:.4
-
-}}]
-
-}}
-
-}}
-
-);
-
-}}
-
-else{{
-
-chart.data.labels=
-dados.labels;
-
-chart.data.datasets[0].data=
-dados.valores;
-
-chart.update();
-
-}}
-
-}}
-
-atualizar();
-
-setInterval(
-atualizar,
-5000
-);
-
-</script>
-
-</body>
-
-</html>
-"""
+def index():
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <title>EcoLight Pro</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body class="bg-slate-50 min-h-screen">
+        <div class="max-w-4xl mx-auto p-6">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl font-bold text-slate-800">🌿 EcoLight Solutions</h1>
+                <div id="status" class="px-4 py-1 rounded-full bg-green-500 text-white font-bold animate-pulse">Online</div>
+            </div>
+
+            <div class="flex gap-4 mb-6">
+                <button onclick="mostrar('painel')" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Painel</button>
+                <button onclick="mostrar('historico')" class="px-6 py-2 bg-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-300">Histórico</button>
+            </div>
+
+            <div id="alerta-box" class="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 mb-6 hidden">
+                <strong>Atenção:</strong> Pouca energia, economize!
+            </div>
+
+            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-slate-500">Luminosidade (LDR)</p>
+                    <h2 class="text-5xl font-black text-blue-600" id="valor-luz">--</h2>
+                </div>
+            </div>
+
+            <div id="historico" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <canvas id="grafico"></canvas>
+            </div>
+        </div>
+
+        <script>
+            let chart;
+            function mostrar(tab) {
+                document.getElementById('painel').classList.add('hidden');
+                document.getElementById('historico').classList.add('hidden');
+                document.getElementById(tab).classList.remove('hidden');
+            }
+
+            async function atualizar() {
+                const res = await fetch('/api/get-luz');
+                const data = await res.json();
+                const luz = parseInt(data.luz);
+                
+                document.getElementById('valor-luz').innerText = luz;
+                
+                if(luz < 300) document.getElementById('alerta-box').classList.remove('hidden');
+                else document.getElementById('alerta-box').classList.add('hidden');
+
+                if(!chart) {
+                    chart = new Chart(document.getElementById('grafico'), { 
+                        type: 'line', 
+                        data: { labels: ['Atual'], datasets: [{label: 'LDR', data: [luz], borderColor: '#2563eb'}] } 
+                    });
+                } else {
+                    chart.data.datasets[0].data.push(luz);
+                    if(chart.data.datasets[0].data.length > 10) chart.data.datasets[0].data.shift();
+                    chart.update();
+                }
+            }
+            setInterval(atualizar, 2000);
+        </script>
+    </body>
+    </html>
+    """)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
