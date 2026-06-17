@@ -531,24 +531,28 @@ atualizar,
 
 
 # ======================
-# ESP
+# RECEBER ESP
 # ======================
 
 @app.route("/dados")
 def dados():
 
-    luz =
-    request.args.get(
-        "luz"
-    )
+    luz = request.args.get("luz")
 
-    if luz:
+    if luz is None:
+        return "SEM DADOS"
+
+    try:
 
         salvar_leitura(
             int(luz)
         )
 
-    return "OK"
+        return "OK"
+
+    except Exception as e:
+
+        return str(e)
 
 
 # ======================
@@ -587,7 +591,11 @@ def grafico():
     })
 
 
-if __name__=="__main__":
+# ======================
+# START
+# ======================
+
+if __name__ == "__main__":
 
     app.run(
         host="0.0.0.0",
