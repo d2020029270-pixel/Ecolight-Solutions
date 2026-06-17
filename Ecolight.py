@@ -4,10 +4,6 @@ import sqlite3
 import requests
 import os
 
-# ==========================
-# CONFIG
-# ==========================
-
 app = Flask(__name__)
 
 EMPRESA = "EcoLight Solutions"
@@ -15,9 +11,9 @@ DB_NAME = "ecolight.db"
 CIDADE = "Itajuba MG"
 
 
-# ==========================
+# ======================
 # BANCO
-# ==========================
+# ======================
 
 def get_conn():
     return sqlite3.connect(DB_NAME)
@@ -27,9 +23,7 @@ def criar_banco():
 
     conn = get_conn()
 
-    c = conn.cursor()
-
-    c.execute("""
+    conn.execute("""
     CREATE TABLE IF NOT EXISTS leituras(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         luz INTEGER,
@@ -45,28 +39,27 @@ def criar_banco():
 criar_banco()
 
 
-# ==========================
+# ======================
 # SALVAR
-# ==========================
+# ======================
 
 def salvar_leitura(luz):
 
     conn = get_conn()
 
-    c = conn.cursor()
-
-    horario = datetime.now().strftime(
-        "%d/%m/%Y %H:%M:%S"
-    )
-
-    c.execute(
+    conn.execute(
         """
         INSERT INTO leituras
         (luz,data_hora)
 
         VALUES (?,?)
         """,
-        (luz, horario)
+        (
+            luz,
+            datetime.now().strftime(
+                "%d/%m/%Y %H:%M:%S"
+            )
+        )
     )
 
     conn.commit()
@@ -74,9 +67,9 @@ def salvar_leitura(luz):
     conn.close()
 
 
-# ==========================
-# DASHBOARD
-# ==========================
+# ======================
+# DADOS
+# ======================
 
 def obter_dados():
 
@@ -85,10 +78,10 @@ def obter_dados():
     c = conn.cursor()
 
     c.execute("""
-        SELECT luz,data_hora
-        FROM leituras
-        ORDER BY id DESC
-        LIMIT 1
+    SELECT luz,data_hora
+    FROM leituras
+    ORDER BY id DESC
+    LIMIT 1
     """)
 
     ultima = c.fetchone()
@@ -107,15 +100,13 @@ def obter_dados():
 
         horario = ultima[1]
 
-        ultima_data = datetime.strptime(
-            horario,
-            "%d/%m/%Y %H:%M:%S"
-        )
-
         segundos = (
             datetime.now()
             -
-            ultima_data
+            datetime.strptime(
+                horario,
+                "%d/%m/%Y %H:%M:%S"
+            )
         ).seconds
 
         online = segundos < 20
@@ -123,6 +114,7 @@ def obter_dados():
     else:
 
         luz = 0
+
         horario = "-"
 
         online = False
@@ -156,9 +148,9 @@ def obter_dados():
     }
 
 
-# ==========================
+# ======================
 # CLIMA
-# ==========================
+# ======================
 
 def obter_clima():
 
@@ -169,15 +161,18 @@ def obter_clima():
             timeout=5
         )
 
-        dados = r.json()
-
-        atual = dados["current_condition"][0]
+        atual = (
+            r.json()
+            ["current_condition"][0]
+        )
 
         return {
 
-            "temp": atual["temp_C"],
+            "temp":
+            atual["temp_C"],
 
-            "umidade": atual["humidity"],
+            "umidade":
+            atual["humidity"],
 
             "descricao":
             atual["weatherDesc"][0]["value"]
@@ -188,21 +183,21 @@ def obter_clima():
 
         return {
 
-            "temp": "--",
+            "temp":"--",
 
-            "umidade": "--",
+            "umidade":"--",
 
-            "descricao": "Indisponível"
+            "descricao":"Indisponível"
 
         }
 
 
-# ==========================
-# APIs
-# ==========================
+# ======================
+# API
+# ======================
 
 @app.route("/api/cards")
-def cards():
+def api_cards():
 
     return jsonify(
         obter_dados()
@@ -210,130 +205,121 @@ def cards():
 
 
 @app.route("/api/clima")
-def clima():
+def api_clima():
 
     return jsonify(
         obter_clima()
     )
 
 
-# ==========================
+@app.route("/dados")
+def dados():
+
+    luz = request.args.get(
+        "luz"
+    )
+
+    if not luz:
+
+        return "SEM DADOS"
+
+    salvar_leitura(
+        int(luz)
+    )
+
+    return "OK"
+
+
+@app.route("/grafico")
+def grafico():
+
+    conn = get_conn()
+
+    dados = conn.execute("""
+    SELECT luz,data_hora
+    FROM leituras
+    ORDER BY id DESC
+    LIMIT 20
+    """).fetchall()
+
+    conn.close()
+
+    dados.reverse()
+
+    return jsonify({
+
+        "labels":
+        [
+            x[1][-8:]
+            for x in dados
+        ],
+
+        "valores":
+        [
+            x[0]
+            for x in dados
+        ]
+
+    })
+
+
+# ======================
 # HOME
-# ==========================
+# ======================
 
 @app.route("/")
 def home():
 
-    d = obter_dados()
-
-    return f"""
-
+    return """
 <html>
 
 <head>
 
-<title>{EMPRESA}</title>
+<title>EcoLight Solutions</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 
-body{{
+body{
 margin:0;
-font-family:Segoe UI;
+font-family:Arial;
 background:#eef3fb;
-}}
+}
 
-header{{
+header{
 padding:30px;
-text-align:center;
-background:linear-gradient(
-135deg,
-#1565c0,
-#1e88e5
-);
-color:white;
-}}
-
-.cards{{
-display:grid;
-
-grid-template-columns:
-repeat(
-auto-fit,
-minmax(240px,1fr)
-);
-
-gap:20px;
-
-padding:25px;
-}}
-
-.card{{
-background:white;
-
-padding:25px;
-
-border-radius:20px;
-
-box-shadow:
-0 10px 25px rgba(0,0,0,.08);
-}}
-
-.valor{{
-font-size:32px;
-font-weight:bold;
-color:#1565c0;
-}}
-
-.box{{
-margin:25px;
-
-background:white;
-
-padding:25px;
-
-border-radius:20px;
-}}
-
-.dot{{
-width:18px;
-height:18px;
-
-background:#00c853;
-
-border-radius:50%;
-
-display:inline-block;
-
-margin-right:10px;
-
-animation:pulse 1.5s infinite;
-}}
-
-@keyframes pulse{{
-50%{{opacity:.4}}
-}}
-
-.toast{{
-position:fixed;
-
-top:20px;
-
-right:20px;
-
 background:#1565c0;
-
 color:white;
+text-align:center;
+}
 
-padding:18px;
+.cards{
+display:grid;
+grid-template-columns:
+repeat(auto-fit,minmax(250px,1fr));
+gap:20px;
+padding:25px;
+}
 
-border-radius:12px;
+.card{
+background:white;
+padding:20px;
+border-radius:20px;
+}
 
-display:none;
+.valor{
+font-size:32px;
+color:#1565c0;
+}
 
-z-index:999;
-}}
+.online{
+color:#00c853;
+}
+
+.offline{
+color:red;
+}
 
 </style>
 
@@ -341,25 +327,11 @@ z-index:999;
 
 <body>
 
-<div class="toast" id="toast">
-
-Atualizando...
-
-</div>
-
 <header>
 
 <h1>
-
-🌿 EcoLight Solutions
-
+🌿 EcoLight
 </h1>
-
-<p>
-
-Monitoramento Inteligente
-
-</p>
 
 </header>
 
@@ -370,23 +342,10 @@ Monitoramento Inteligente
 Sistema
 
 <div
-class="valor"
+id="status"
+class="valor">
 
-id="status">
-
-Carregando...
-
-</div>
-
-</div>
-
-☀ Luminosidade
-
-<div
-class="valor"
-id="luz">
-
-{d["luz"]}
+Carregando
 
 </div>
 
@@ -394,50 +353,33 @@ id="luz">
 
 <div class="card">
 
-⚡ Consumo
+Luminosidade
 
 <div
-class="valor"
-id="consumo">
-
-{d["consumo"]}
-
-kWh
-
-</div>
-
-</div>
-
-<div class="card">
-
-🌱 Economia
-
-<div
-class="valor"
-id="economia">
-
-{d["economia"]}%
-
-</div>
-
-</div>
-
-<div class="card">
-
-🌤 Clima
-
-<div
-class="valor"
-id="temp">
+id="luz"
+class="valor">
 
 --
 
 </div>
 
-<div
-id="clima">
+</div>
 
-Carregando...
+<div class="card">
+
+Clima
+
+<div
+id="temp"
+class="valor">
+
+--
+
+</div>
+
+<div id="clima">
+
+--
 
 </div>
 
@@ -445,16 +387,13 @@ Carregando...
 
 <div class="card">
 
-🔔 Notificação
+Alerta
 
 <div
-class="valor"
+id="alerta"
+class="valor">
 
-style="font-size:20px"
-
-id="alerta">
-
-Nenhuma
+--
 
 </div>
 
@@ -462,13 +401,7 @@ Nenhuma
 
 </div>
 
-<div class="box">
-
-<h2>
-
-📈 Histórico da Luminosidade
-
-</h2>
+<div class="card">
 
 <canvas
 id="grafico">
@@ -481,210 +414,101 @@ id="grafico">
 
 let chart;
 
-function notificar(texto){{
-
-let t=
-document.getElementById(
-"toast"
-);
-
-t.innerText=
-texto;
-
-t.style.display=
-"block";
-
-setTimeout(
-()=>{{
-t.style.display=
-"none";
-}},
-2500
-);
-
-}}
-
 async function atualizar(){
 
-const r=
+let d=
+await (
 await fetch(
 "/api/cards"
-);
-
-const d=
-await r.json();
-
-let status =
-document.getElementById(
-"status"
-);
-
-if(d.online){
+)
+).json();
 
 status.innerHTML=
-'<span class="dot"></span> Online';
+d.online
+?
+"🟢 Online"
+:
+"🔴 Offline";
 
-status.style.color=
-"#00c853";
+luz.innerText=
+d.luz;
+
+let c=
+await(
+await fetch(
+"/api/clima"
+)
+).json();
+
+temp.innerText=
+c.temp+"°C";
+
+clima.innerText=
+c.descricao;
+
+alerta.innerText=
+
+d.luz<300
+?
+"⚠ Pouca Luz"
+:
+"✓ Normal";
+
+let g=
+await(
+await fetch(
+"/grafico"
+)
+).json();
+
+if(!chart){
+
+chart=
+new Chart(
+grafico,
+{
+type:"line",
+
+data:{
+
+labels:
+g.labels,
+
+datasets:[{
+
+data:
+g.valores,
+
+fill:true
+
+}]
+
+}
+
+}
+);
 
 }
 
 else{
 
-status.innerHTML=
-'🔴 Offline';
-
-status.style.color=
-"#d50000";
-
-}
-
-luz.innerText=
-d.luz;
-
-consumo.innerText=
-d.consumo+
-" kWh";
-
-economia.innerText=
-d.economia+
-"%";
-
-}
-
-const c=
-await fetch(
-"/api/clima"
-);
-
-const clima=
-await c.json();
-
-temp.innerText=
-clima.temp+
-"°C";
-
-document
-.getElementById(
-"clima"
-)
-.innerText=
-
-clima.descricao+
-
-" • "+
-
-clima.umidade+
-
-"%";
-
-if(
-Number(clima.temp)>=35
-){{
-alerta.innerText=
-"🔥 Calor alto";
-
-notificar(
-"Temperatura elevada"
-);
-
-}}
-
-else if(
-d.luz<300
-){{
-alerta.innerText=
-"⚠ Ambiente escuro";
-
-notificar(
-"Baixa luminosidade"
-);
-
-}}
-
-else{{
-
-alerta.innerText=
-"✓ Normal";
-
-}}
-
-const g=
-await fetch(
-"/grafico"
-);
-
-const dados=
-await g.json();
-
-if(!chart){{
-
-chart=
-new Chart(
-
-document
-.getElementById(
-"grafico"
-),
-
-{{
-
-type:"line",
-
-data:{{
-
-labels:
-dados.labels,
-
-datasets:[{{
-
-label:
-"Luminosidade",
-
-data:
-dados.valores,
-
-fill:true,
-
-tension:.4,
-
-borderWidth:3,
-
-backgroundColor:
-"rgba(21,101,192,.15)",
-
-borderColor:
-"#1565c0"
-
-}}]
-
-}}
-
-}}
-
-);
-
-}}
-
-else{{
-
 chart.data.labels=
-dados.labels;
+g.labels;
 
 chart.data.datasets[0].data=
-dados.valores;
+g.valores;
 
 chart.update();
 
-}}
+}
 
-}}
+}
 
 atualizar();
 
 setInterval(
 atualizar,
-5000
+3000
 );
 
 </script>
@@ -692,5 +516,17 @@ atualizar,
 </body>
 
 </html>
-
 """
+
+
+if __name__ == "__main__":
+
+    app.run(
+        host="0.0.0.0",
+        port=int(
+            os.environ.get(
+                "PORT",
+                5000
+            )
+        )
+    )
