@@ -236,6 +236,7 @@ def home():
     d = obter_dados()
 
     return f"""
+<!DOCTYPE html>
 
 <html>
 
@@ -256,61 +257,50 @@ background:#eef3fb;
 header{{
 padding:30px;
 text-align:center;
-
-background:
-linear-gradient(
-135deg,
-#1565c0,
-#1e88e5
-);
-
+background:linear-gradient(135deg,#1565c0,#1e88e5);
 color:white;
 }}
 
 .cards{{
 display:grid;
-
 grid-template-columns:
 repeat(auto-fit,minmax(240px,1fr));
-
 gap:20px;
-
 padding:25px;
 }}
 
 .card{{
 background:white;
-
 padding:25px;
-
 border-radius:20px;
-
-box-shadow:
-0 8px 20px rgba(0,0,0,.08);
+box-shadow:0 10px 25px rgba(0,0,0,.08);
 }}
 
 .valor{{
-font-size:30px;
+font-size:32px;
 font-weight:bold;
 color:#1565c0;
 }}
 
-.online{{
-color:#00c853;
-}}
-
-.offline{{
-color:#d50000;
-}}
+.online{{color:#00c853;}}
+.offline{{color:#d50000;}}
 
 .box{{
 margin:25px;
-
-background:white;
-
 padding:25px;
-
+background:white;
 border-radius:20px;
+}}
+
+.toast{{
+position:fixed;
+top:20px;
+right:20px;
+background:#1565c0;
+color:white;
+padding:15px;
+border-radius:12px;
+display:none;
 }}
 
 </style>
@@ -318,6 +308,8 @@ border-radius:20px;
 </head>
 
 <body>
+
+<div class="toast" id="toast"></div>
 
 <header>
 
@@ -331,7 +323,9 @@ border-radius:20px;
 
 <div class="card">
 Sistema
-<div id="status"></div>
+<div class="valor" id="status">
+{"🟢 Online" if d["online"] else "🔴 Offline"}
+</div>
 </div>
 
 <div class="card">
@@ -357,15 +351,15 @@ Sistema
 
 <div class="card">
 🌤 Clima
-<div class="valor" id="temp">
---
+<div class="valor" id="temp">--</div>
+<div id="clima">
+Carregando...
 </div>
-<div id="clima"></div>
 </div>
 
 <div class="card">
-🔔 Notificações
-<div id="alerta">
+🔔 Notificação
+<div class="valor" id="alerta">
 Normal
 </div>
 </div>
@@ -374,7 +368,7 @@ Normal
 
 <div class="box">
 
-<h2>📈 Histórico</h2>
+<h2>📈 Histórico da Luminosidade</h2>
 
 <canvas id="grafico"></canvas>
 
@@ -384,84 +378,89 @@ Normal
 
 let chart;
 
+function toast(txt){{
+let t=document.getElementById("toast");
+
+t.innerText=txt;
+
+t.style.display="block";
+
+setTimeout(()=>{{
+t.style.display="none";
+}},3000);
+
+}}
+
 async function atualizar(){{
 
 let r=
-await fetch(
-"/api/cards"
-);
+await fetch("/api/cards");
 
 let d=
 await r.json();
 
-luz.innerText=d.luz;
+document.getElementById(
+"luz"
+).innerText=d.luz;
 
-consumo.innerText=
+document.getElementById(
+"consumo"
+).innerText=
 d.consumo+" kWh";
 
-economia.innerText=
+document.getElementById(
+"economia"
+).innerText=
 d.economia+"%";
 
-
-status.innerHTML=
+document.getElementById(
+"status"
+).innerHTML=
 d.online
 ?
-'<span class="online">🟢 Online</span>'
+"🟢 Online"
 :
-'<span class="offline">🔴 Offline</span>';
+"🔴 Offline";
 
 
-// CLIMA
-
-let c=
+let climaReq=
 await fetch(
 "/api/clima"
 );
 
 let clima=
-await c.json();
+await climaReq.json();
 
 temp.innerText=
 clima.temp+"°C";
 
-document
-.getElementById(
+document.getElementById(
 "clima"
-)
-.innerHTML=
-
+).innerText=
 clima.descricao+
-
-"<br>☔ "+
-
-clima.chuva+
-
+" • "+
+clima.umidade+
 "%";
 
-
-// ALERTAS
-
 if(
-clima.chuva>70
+clima.chuva==="Sim"
 ){{
 alerta.innerText=
-"☔ Alta chance de chuva";
+"☔ Chuva prevista";
 }}
 
 else if(
 d.luz<300
 ){{
 alerta.innerText=
-"⚠ Baixa luminosidade";
+"⚠ Baixa luz";
 }}
 
 else{{
 alerta.innerText=
-"✓ Ambiente normal";
+"✓ Normal";
 }}
 
-
-// GRAFICO
 
 let g=
 await fetch(
@@ -475,27 +474,33 @@ if(!chart){{
 
 chart=
 new Chart(
-grafico,
+
+document.getElementById(
+"grafico"
+),
+
 {{
+
 type:"line",
 
 data:{{
-labels:
-dados.labels,
+labels:dados.labels,
 
 datasets:[{{
-label:
-"Luminosidade",
+label:"LDR",
 
-data:
-dados.valores,
+data:dados.valores,
 
 fill:true,
 
 tension:.4
+
 }}]
+
 }}
+
 }}
+
 );
 
 }}
@@ -526,83 +531,4 @@ atualizar,
 </body>
 
 </html>
-
 """
-
-
-# ======================
-# RECEBER ESP
-# ======================
-
-@app.route("/dados")
-def dados():
-
-    luz = request.args.get("luz")
-
-    if luz is None:
-        return "SEM DADOS"
-
-    try:
-
-        salvar_leitura(
-            int(luz)
-        )
-
-        return "OK"
-
-    except Exception as e:
-
-        return str(e)
-
-
-# ======================
-# GRAFICO
-# ======================
-
-@app.route("/grafico")
-def grafico():
-
-    conn=get_conn()
-
-    dados=
-    conn.execute("""
-    SELECT luz,data_hora
-    FROM leituras
-    ORDER BY id DESC
-    LIMIT 20
-    """).fetchall()
-
-    conn.close()
-
-    dados.reverse()
-
-    return jsonify({
-
-        "labels":[
-            x[1][-8:]
-            for x in dados
-        ],
-
-        "valores":[
-            x[0]
-            for x in dados
-        ]
-
-    })
-
-
-# ======================
-# START
-# ======================
-
-if __name__ == "__main__":
-
-    app.run(
-        host="0.0.0.0",
-        port=int(
-            os.environ.get(
-                "PORT",
-                5000
-            )
-        )
-    )
