@@ -84,12 +84,6 @@ def obter_dados():
 
     c = conn.cursor()
 
-    c.execute(
-        "SELECT COUNT(*) FROM leituras"
-    )
-
-    total = c.fetchone()[0]
-
     c.execute("""
         SELECT luz,data_hora
         FROM leituras
@@ -99,6 +93,12 @@ def obter_dados():
 
     ultima = c.fetchone()
 
+    c.execute(
+        "SELECT COUNT(*) FROM leituras"
+    )
+
+    total = c.fetchone()[0]
+
     conn.close()
 
     if ultima:
@@ -107,32 +107,52 @@ def obter_dados():
 
         horario = ultima[1]
 
+        ultima_data = datetime.strptime(
+            horario,
+            "%d/%m/%Y %H:%M:%S"
+        )
+
+        segundos = (
+            datetime.now()
+            -
+            ultima_data
+        ).seconds
+
+        online = segundos < 20
+
     else:
 
         luz = 0
-
         horario = "-"
 
-    consumo = round(
-        total * 0.00045,
-        3
-    )
-
-    economia = max(
-        0,
-        min(
-            100,
-            round(
-                (1000 - luz) / 10
-            )
-        )
-    )
+        online = False
 
     return {
+
         "luz": luz,
+
         "horario": horario,
-        "consumo": consumo,
-        "economia": economia
+
+        "consumo":
+        round(
+            total*0.00045,
+            3
+        ),
+
+        "economia":
+        max(
+            0,
+            min(
+                100,
+                round(
+                    (1000-luz)/10
+                )
+            )
+        ),
+
+        "online":
+        online
+
     }
 
 
@@ -349,17 +369,16 @@ Monitoramento Inteligente
 
 Sistema
 
-<div class="valor">
+<div
+class="valor"
 
-<span class="dot"></span>
+id="status">
 
-Online
+Carregando...
 
 </div>
 
 </div>
-
-<div class="card">
 
 ☀ Luminosidade
 
@@ -485,7 +504,7 @@ t.style.display=
 
 }}
 
-async function atualizar(){{
+async function atualizar(){
 
 const r=
 await fetch(
@@ -494,6 +513,31 @@ await fetch(
 
 const d=
 await r.json();
+
+let status =
+document.getElementById(
+"status"
+);
+
+if(d.online){
+
+status.innerHTML=
+'<span class="dot"></span> Online';
+
+status.style.color=
+"#00c853";
+
+}
+
+else{
+
+status.innerHTML=
+'🔴 Offline';
+
+status.style.color=
+"#d50000";
+
+}
 
 luz.innerText=
 d.luz;
@@ -505,6 +549,8 @@ d.consumo+
 economia.innerText=
 d.economia+
 "%";
+
+}
 
 const c=
 await fetch(
