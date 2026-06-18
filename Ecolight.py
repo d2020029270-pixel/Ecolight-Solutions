@@ -1,14 +1,16 @@
 from flask import Flask, render_template_string, jsonify, request
+import os
 
 app = Flask(__name__)
 
-# Variável global para armazenar a última leitura do sensor
+# Variável global para armazenar a última leitura do sensor (armazenamos como int)
 dados_sensor = {"luz": 0}
 
 @app.route("/update")
 def update():
     """Rota para o ESP8266 enviar dados"""
-    luz = request.args.get("luz", 0)
+    # Convertemos para int direto aqui para garantir consistência de tipo
+    luz = request.args.get("luz", 0, type=int)
     dados_sensor["luz"] = luz
     return "OK"
 
@@ -24,6 +26,7 @@ def index():
     <html lang="pt-BR">
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>EcoLight Pro</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -58,6 +61,8 @@ def index():
 
         <script>
             let chart;
+            let contadorLeituras = 0;
+
             function mostrar(tab) {
                 document.getElementById('painel').classList.add('hidden');
                 document.getElementById('historico').classList.add('hidden');
@@ -65,24 +70,51 @@ def index():
             }
 
             async function atualizar() {
-                const res = await fetch('/api/get-luz');
-                const data = await res.json();
-                const luz = parseInt(data.luz);
-                
-                document.getElementById('valor-luz').innerText = luz;
-                
-                if(luz < 300) document.getElementById('alerta-box').classList.remove('hidden');
-                else document.getElementById('alerta-box').classList.add('hidden');
+                try {
+                    const res = await fetch('/api/get-luz');
+                    const data = await res.json();
+                    const luz = parseInt(data.luz);
+                    
+                    document.getElementById('valor-luz').innerText = luz;
+                    
+                    // Alerta se a luz estiver baixa (ajuste o valor conforme seus testes)
+                    if(luz < 300) {
+                        document.getElementById('alerta-box').classList.remove('hidden');
+                    } else {
+                        document.getElementById('alerta-box').classList.add('hidden');
+                    }
 
-                if(!chart) {
-                    chart = new Chart(document.getElementById('grafico'), { 
-                        type: 'line', 
-                        data: { labels: ['Atual'], datasets: [{label: 'LDR', data: [luz], borderColor: '#2563eb'}] } 
-                    });
-                } else {
-                    chart.data.datasets[0].data.push(luz);
-                    if(chart.data.datasets[0].data.length > 10) chart.data.datasets[0].data.shift();
-                    chart.update();
+                    contadorLeituras++;
+                    const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                    if(!chart) {
+                        chart = new Chart(document.getElementById('grafico'), { 
+                            type: 'line', 
+                            data: { 
+                                labels: [agora], 
+                                datasets: [{
+                                    label: 'LDR', 
+                                    data: [luz], 
+                                    borderColor: '#2563eb',
+                                    tension: 0.2
+                                }] 
+                            },
+                            options: { responsive: true }
+                        });
+                    } else {
+                        // Adiciona novo dado e nova label de tempo
+                        chart.data.labels.push(agora);
+                        chart.data.datasets[0].data.push(luz);
+                        
+                        // Mantém apenas os últimos 15 registros para não travar a tela
+                        if(chart.data.datasets[0].data.length > 15) {
+                            chart.data.labels.shift();
+                            chart.data.datasets[0].data.shift();
+                        }
+                        chart.update();
+                    }
+                } catch (error) {
+                    console.error("Erro ao buscar dados do servidor:", error);
                 }
             }
             setInterval(atualizar, 2000);
@@ -92,4 +124,6 @@ def index():
     """)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # O Render exige ler a porta dinâmica do ambiente via variável de ambiente PORT
+    porta = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=porta)
