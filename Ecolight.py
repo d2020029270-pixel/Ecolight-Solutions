@@ -1,23 +1,37 @@
 from flask import Flask, render_template_string, jsonify, request
 import os
+import time  # <--- IMPORTANTE: Adiciona esta linha
 
 app = Flask(__name__)
 
-# Variável global para armazenar a última leitura do sensor (armazenamos como int)
-dados_sensor = {"luz": 0}
+# Adicionamos "ultima_atualizacao" para saber quando o ESP mandou o dado
+dados_sensor = {
+    "luz": 0,
+    "ultima_atualizacao": 0
+}
 
 @app.route("/update")
 def update():
     """Rota para o ESP8266 enviar dados"""
-    # Convertemos para int direto aqui para garantir consistência de tipo
     luz = request.args.get("luz", 0, type=int)
     dados_sensor["luz"] = luz
+    dados_sensor["ultima_atualizacao"] = time.time()  # Guarda o segundo atual do servidor
     return "OK"
 
 @app.route("/api/get-luz")
 def get_luz():
-    """Rota para o site consultar o valor"""
-    return jsonify({"luz": dados_sensor["luz"]})
+    """Rota para o site consultar o valor e o status"""
+    agora = time.time()
+    # Se o último dado recebido foi há mais de 7 segundos, consideramos Offline
+    if agora - dados_sensor["ultima_atualizacao"] > 7:
+        status = "Offline"
+    else:
+        status = "Online"
+        
+    return jsonify({
+        "luz": dados_sensor["luz"],
+        "status": status
+    })
 
 @app.route("/")
 def index():
@@ -35,7 +49,7 @@ def index():
         <div class="max-w-4xl mx-auto p-6">
             <div class="flex justify-between items-center mb-8">
                 <h1 class="text-3xl font-bold text-slate-800">🌿 EcoLight Solutions</h1>
-                <div id="status" class="px-4 py-1 rounded-full bg-green-500 text-white font-bold animate-pulse">Online</div>
+                <div id="status" class="px-4 py-1 rounded-full font-bold text-white transition-all duration-300">Verificando...</div>
             </div>
 
             <div class="flex gap-4 mb-6">
@@ -61,8 +75,6 @@ def index():
 
         <script>
             let chart;
-            let contadorLeituras = 0;
-
             function mostrar(tab) {
                 document.getElementById('painel').classList.add('hidden');
                 document.getElementById('historico').classList.add('hidden');
@@ -73,48 +85,50 @@ def index():
                 try {
                     const res = await fetch('/api/get-luz');
                     const data = await res.json();
+                    
                     const luz = parseInt(data.luz);
+                    const statusPlaca = data.status; // Recebe se está Online ou Offline
                     
-                    document.getElementById('valor-luz').innerText = luz;
+                    // --- NOVA LÓGICA DE STATUS VISUAL ---
+                    const statusElemento = document.getElementById('status');
+                    statusElemento.innerText = statusPlaca;
                     
-                    // Alerta se a luz estiver baixa (ajuste o valor conforme seus testes)
-                    if(luz < 300) {
-                        document.getElementById('alerta-box').classList.remove('hidden');
+                    if (statusPlaca === "Online") {
+                        statusElemento.className = "px-4 py-1 rounded-full bg-green-500 text-white font-bold animate-pulse";
+                        document.getElementById('valor-luz').innerText = luz;
+                        
+                        // Só atualiza o alerta e o gráfico se a placa estiver online
+                        if(luz < 300) document.getElementById('alerta-box').classList.remove('hidden');
+                        else document.getElementById('alerta-box').classList.add('hidden');
                     } else {
+                        // Se estiver Offline, muda para vermelho e tira a animação
+                        statusElemento.className = "px-4 py-1 rounded-full bg-red-500 text-white font-bold";
+                        document.getElementById('valor-luz').innerText = "Desconectado";
                         document.getElementById('alerta-box').classList.add('hidden');
                     }
-
-                    contadorLeituras++;
-                    const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-                    if(!chart) {
-                        chart = new Chart(document.getElementById('grafico'), { 
-                            type: 'line', 
-                            data: { 
-                                labels: [agora], 
-                                datasets: [{
-                                    label: 'LDR', 
-                                    data: [luz], 
-                                    borderColor: '#2563eb',
-                                    tension: 0.2
-                                }] 
-                            },
-                            options: { responsive: true }
-                        });
-                    } else {
-                        // Adiciona novo dado e nova label de tempo
-                        chart.data.labels.push(agora);
-                        chart.data.datasets[0].data.push(luz);
-                        
-                        // Mantém apenas os últimos 15 registros para não travar a tela
-                        if(chart.data.datasets[0].data.length > 15) {
-                            chart.data.labels.shift();
-                            chart.data.datasets[0].data.shift();
+                    
+                    // Só atualiza o gráfico se estiver online para não encher de lixo o histórico
+                    if (statusPlaca === "Online") {
+                        const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        if(!chart) {
+                            chart = new Chart(document.getElementById('grafico'), { 
+                                type: 'line', 
+                                data: { labels: [agora], datasets: [{label: 'LDR', data: [luz], borderColor: '#2563eb'}] } 
+                            });
+                        } else {
+                            chart.data.labels.push(agora);
+                            chart.data.datasets[0].data.push(luz);
+                            if(chart.data.datasets[0].data.length > 15) {
+                                chart.data.labels.shift();
+                                chart.data.datasets[0].data.shift();
+                            }
+                            chart.update();
                         }
-                        chart.update();
                     }
                 } catch (error) {
                     console.error("Erro ao buscar dados do servidor:", error);
+                    document.getElementById('status').className = "px-4 py-1 rounded-full bg-red-500 text-white font-bold";
+                    document.getElementById('status').innerText = "Erro Servidor";
                 }
             }
             setInterval(atualizar, 2000);
@@ -124,6 +138,5 @@ def index():
     """)
 
 if __name__ == "__main__":
-    # O Render exige ler a porta dinâmica do ambiente via variável de ambiente PORT
     porta = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=porta)
