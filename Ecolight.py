@@ -4,63 +4,62 @@ import time
 
 app = Flask(__name__)
 
-# Dicionário global gerenciando dados do sensor, tempo e métricas elétricas
+# Dicionário global
 dados_sensor = {
     "luz": 0,
     "ultima_atualizacao": 0,
     "consumo_acumulado": 0.0
 }
 
+# Tarifa de energia (Exemplo: R$ 0,95 por kWh)
+TARIFA_KWH = 0.95
+
 def recalcular_consumo(valor_luz):
-    """Calcula dinamicamente os kWh baseado no tempo de lâmpadas ligadas na maquete"""
     agora = time.time()
     if dados_sensor["ultima_atualizacao"] > 0:
-        tempo_passado = agora - dados_sensor["ultima_atualizacao"]  # em segundos
+        tempo_passado = agora - dados_sensor["ultima_atualizacao"]
         
-        # Lógica: Se o LDR estiver abaixo de 300, as luzes da maquete acendem
         if valor_luz < 300:
             horas = tempo_passado / 3600.0
+            # Consumo de 0.025 kW (25W simulados)
             dados_sensor["consumo_acumulado"] += 0.025 * horas
             
     dados_sensor["ultima_atualizacao"] = agora
 
 @app.route("/update")
 def update():
-    """Rota para o ESP8266 enviar dados"""
     luz_bruta = request.args.get("luz", "0")
     luz_limpa = ''.join(filter(str.isdigit, str(luz_bruta)))
-    
     valor_final = int(luz_limpa) if luz_limpa else 0
     
     recalcular_consumo(valor_final)
     dados_sensor["luz"] = valor_final
-    
     return "OK"
 
 @app.route("/api/get-luz")
 def get_luz():
-    """Rota para o frontend consultar o valor atual"""
     agora = time.time()
     luz = dados_sensor["luz"]
     
     recalcular_consumo(luz)
-    
-    # Se a placa não comunicar por mais de 7s, considera offline internamente
     status = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 7 else "Online"
         
     taxa_economia = round((luz / 1024.0) * 100)
     taxa_economia = max(0, min(100, taxa_economia))
     
+    # Cálculo Financeiro
+    custo_rs = dados_sensor["consumo_acumulado"] * TARIFA_KWH
+    
     temp = 25 if luz > 400 else 18
     umid = 50 if luz > 400 else 80
     desc = "Ensolarado" if luz > 500 else "Nublado / Noite"
-    clima_string = f"{temp}°C - {desc} ({umid}% Umid.)"
+    clima_string = f"{temp}°C - {desc} ({umid}%)"
         
     return jsonify({
         "luz": luz,
         "status": status,
-        # Formata o consumo para ter apenas 4 casas decimais (ex: 0.0065)
         "consumo": f'{dados_sensor["consumo_acumulado"]:.4f}', 
+        "custo": f'{custo_rs:.4f}',
         "economia": taxa_economia,
         "clima": clima_string
     })
@@ -73,49 +72,90 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>EcoLight Pro</title>
+        <title>EcoLight Pro | Dashboard</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
-    <body class="bg-slate-50 min-h-screen">
-        <div class="max-w-4xl mx-auto p-6">
+    <body class="bg-slate-50 min-h-screen flex flex-col">
+        <div class="max-w-5xl mx-auto p-6 flex-grow w-full">
             
-            <div class="flex justify-between items-center mb-8">
-                <h1 class="text-3xl font-bold text-slate-800">🌿 EcoLight Solutions</h1>
-            </div>
-
-            <div class="flex gap-4 mb-6">
-                <button id="btn-painel" onclick="mostrar('painel')" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold transition">Painel</button>
-                <button id="btn-historico" onclick="mostrar('historico')" class="px-6 py-2 bg-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-300 transition">Histórico</button>
-            </div>
-
-            <div id="alerta-box" class="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 mb-6 hidden rounded-r-lg">
-                <strong>Atenção:</strong> Pouca energia natural, economize! Sistema artificial ativado.
-            </div>
-
-            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <p class="text-slate-500 font-medium">Luminosidade (LDR)</p>
-                    <h2 class="text-5xl font-black text-blue-600 mt-2" id="valor-luz">--</h2>
+            <div class="flex items-center gap-3 mb-8 border-b border-slate-200 pb-4">
+                <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                 </div>
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <p class="text-slate-500 font-medium">Clima Regional Estipulado</p>
-                    <h2 class="text-2xl font-bold text-slate-800 mt-4" id="valor-clima">Carregando...</h2>
-                </div>
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <p class="text-slate-500 font-medium">Consumo da Maquete</p>
-                    <h2 class="text-4xl font-bold text-red-600 mt-3" id="valor-consumo">0.0000 kWh</h2>
-                </div>
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <p class="text-slate-500 font-medium">Eficiência / Economia</p>
-                    <h2 class="text-3xl font-bold text-green-600 mt-3" id="valor-economia">--%</h2>
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-800 tracking-tight">EcoLight Solutions</h1>
+                    <p class="text-sm text-slate-500 font-medium">Painel de Monitoramento Inteligente</p>
                 </div>
             </div>
 
-            <div id="historico" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <canvas id="grafico"></canvas>
+            <div class="flex gap-3 mb-6">
+                <button id="btn-painel" onclick="mostrar('painel')" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold transition shadow-sm text-sm">Painel Principal</button>
+                <button id="btn-historico" onclick="mostrar('historico')" class="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-50 transition shadow-sm text-sm">Análise Histórica</button>
+            </div>
+
+            <div id="alerta-box" class="bg-orange-50 border border-orange-200 text-orange-800 p-4 mb-6 hidden rounded-xl shadow-sm flex items-center gap-3">
+                <svg class="w-6 h-6 text-orange-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                <span><strong>Atenção:</strong> Baixa luminosidade detectada. O sistema de iluminação artificial foi ativado.</span>
+            </div>
+
+            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="text-slate-500 font-semibold text-sm">Luminosidade (LDR)</p>
+                        <div class="p-2 bg-blue-50 rounded-lg"><svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg></div>
+                    </div>
+                    <h2 class="text-4xl font-black text-slate-800" id="valor-luz">--</h2>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="text-slate-500 font-semibold text-sm">Clima Regional</p>
+                        <div class="p-2 bg-sky-50 rounded-lg"><svg class="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg></div>
+                    </div>
+                    <h2 class="text-xl font-bold text-slate-700" id="valor-clima">--</h2>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="text-slate-500 font-semibold text-sm">Consumo / Custo</p>
+                        <div class="p-2 bg-red-50 rounded-lg"><svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800" id="valor-consumo">0.0000 <span class="text-sm text-slate-400 font-medium">kWh</span></h2>
+                        <p class="text-sm font-semibold text-red-500 mt-1" id="valor-custo">R$ 0,00</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-slate-500 font-semibold text-sm">Eficiência Verde</p>
+                        <div class="p-2 bg-green-50 rounded-lg"><svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg></div>
+                    </div>
+                    <div>
+                        <h2 class="text-3xl font-black text-green-600" id="valor-economia">--%</h2>
+                        <div class="w-full bg-slate-100 rounded-full h-2 mt-3">
+                            <div class="bg-green-500 h-2 rounded-full transition-all duration-500" id="barra-economia" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="historico" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mt-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-slate-700">Gráfico de Leitura LDR</h3>
+                    <span class="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">Últimos minutos</span>
+                </div>
+                <canvas id="grafico" class="w-full h-64"></canvas>
             </div>
         </div>
+
+        <footer class="border-t border-slate-200 py-6 mt-12 bg-white text-center text-sm text-slate-500">
+            <p><strong>EcoLight Solutions</strong> &copy; 2024 - Todos os direitos reservados.</p>
+            <p class="text-xs mt-1">Monitoramento Sustentável por ESP8266 & Flask.</p>
+        </footer>
 
         <script>
             let chart;
@@ -125,12 +165,15 @@ def index():
                 document.getElementById('historico').classList.add('hidden');
                 document.getElementById(tab).classList.remove('hidden');
                 
+                const btnActive = "px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold transition shadow-sm text-sm";
+                const btnInactive = "px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-50 transition shadow-sm text-sm";
+
                 if(tab === 'painel') {
-                    document.getElementById('btn-painel').className = "px-6 py-2 bg-blue-600 text-white rounded-lg font-bold transition";
-                    document.getElementById('btn-historico').className = "px-6 py-2 bg-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-300 transition";
+                    document.getElementById('btn-painel').className = btnActive;
+                    document.getElementById('btn-historico').className = btnInactive;
                 } else {
-                    document.getElementById('btn-historico').className = "px-6 py-2 bg-blue-600 text-white rounded-lg font-bold transition";
-                    document.getElementById('btn-painel').className = "px-6 py-2 bg-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-300 transition";
+                    document.getElementById('btn-historico').className = btnActive;
+                    document.getElementById('btn-painel').className = btnInactive;
                 }
             }
 
@@ -139,42 +182,36 @@ def index():
                     const res = await fetch('/api/get-luz');
                     const data = await res.json();
                     
-                    const luz = parseInt(data.luz);
-                    const statusPlaca = data.status;
-                    
-                    if (statusPlaca === "Online") {
-                        document.getElementById('valor-luz').innerText = luz;
+                    if (data.status === "Online") {
+                        document.getElementById('valor-luz').innerText = data.luz;
                         document.getElementById('valor-clima').innerText = data.clima;
-                        document.getElementById('valor-consumo').innerText = data.consumo + " kWh";
-                        document.getElementById('valor-economia').innerText = data.economia + "%";
+                        document.getElementById('valor-consumo').innerText = data.consumo;
                         
-                        if(luz < 300) {
+                        // Atualiza o Custo Financeiro formatado
+                        document.getElementById('valor-custo').innerText = "R$ " + data.custo.replace('.', ',');
+                        
+                        // Atualiza a barra e texto de economia
+                        document.getElementById('valor-economia').innerText = data.economia + "%";
+                        document.getElementById('barra-economia').style.width = data.economia + "%";
+                        
+                        // Alerta
+                        if(data.luz < 300) {
                             document.getElementById('alerta-box').classList.remove('hidden');
                         } else {
                             document.getElementById('alerta-box').classList.add('hidden');
                         }
                         
-                        // Atualiza o Gráfico
+                        // Gráfico
                         const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         if(!chart) {
                             chart = new Chart(document.getElementById('grafico'), { 
                                 type: 'line', 
-                                data: { 
-                                    labels: [agora], 
-                                    datasets: [{
-                                        label: 'Luminosidade', 
-                                        data: [luz], 
-                                        borderColor: '#2563eb',
-                                        backgroundColor: 'rgba(37, 99, 235, 0.05)',
-                                        fill: true,
-                                        tension: 0.2
-                                    }] 
-                                },
-                                options: { responsive: true, scales: { y: { min: 0, max: 1024 } } }
+                                data: { labels: [agora], datasets: [{ label: 'Luminosidade', data: [data.luz], borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.3 }] },
+                                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1024 } } }
                             });
                         } else {
                             chart.data.labels.push(agora);
-                            chart.data.datasets[0].data.push(luz);
+                            chart.data.datasets[0].data.push(data.luz);
                             if(chart.data.datasets[0].data.length > 15) {
                                 chart.data.labels.shift();
                                 chart.data.datasets[0].data.shift();
@@ -182,16 +219,17 @@ def index():
                             chart.update();
                         }
                     } else {
-                        // Se a placa desligar, o sistema alerta de forma discreta nos cards
-                        document.getElementById('valor-luz').innerText = "Desconectado";
-                        document.getElementById('valor-clima').innerText = "Aguardando";
+                        document.getElementById('valor-luz').innerText = "Offline";
+                        document.getElementById('valor-clima').innerText = "--";
+                        document.getElementById('barra-economia').style.width = "0%";
                         document.getElementById('alerta-box').classList.add('hidden');
                     }
                 } catch (error) {
-                    console.error("Erro ao buscar dados do servidor:", error);
+                    console.error("Erro no fetch:", error);
                 }
             }
             setInterval(atualizar, 2000);
+            atualizar();
         </script>
     </body>
     </html>
