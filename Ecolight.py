@@ -17,8 +17,7 @@ def recalcular_consumo(valor_luz):
     if dados_sensor["ultima_atualizacao"] > 0:
         tempo_passado = agora - dados_sensor["ultima_atualizacao"]  # em segundos
         
-        # Lógica: Se o LDR estiver abaixo de 300, as luzes da maquete acendem (consomem energia)
-        # Simulando uma carga de iluminamento artificial de 25W (0.025 kW)
+        # Lógica: Se o LDR estiver abaixo de 300, as luzes da maquete acendem
         if valor_luz < 300:
             horas = tempo_passado / 3600.0
             dados_sensor["consumo_acumulado"] += 0.025 * horas
@@ -27,13 +26,12 @@ def recalcular_consumo(valor_luz):
 
 @app.route("/update")
 def update():
-    """Rota para o ESP8266 enviar dados de forma robusta"""
+    """Rota para o ESP8266 enviar dados"""
     luz_bruta = request.args.get("luz", "0")
     luz_limpa = ''.join(filter(str.isdigit, str(luz_bruta)))
     
     valor_final = int(luz_limpa) if luz_limpa else 0
     
-    # Roda as regras de cálculo matemático de gastos antes de atualizar o valor fixo
     recalcular_consumo(valor_final)
     dados_sensor["luz"] = valor_final
     
@@ -41,23 +39,18 @@ def update():
 
 @app.route("/api/get-luz")
 def get_luz():
-    """Rota para o frontend consultar o valor atual, status e métricas calculadas"""
+    """Rota para o frontend consultar o valor atual"""
     agora = time.time()
     luz = dados_sensor["luz"]
     
-    # Atualiza o cálculo do consumo até o exato segundo atual
     recalcular_consumo(luz)
     
-    if agora - dados_sensor["ultima_atualizacao"] > 7:
-        status = "Offline"
-    else:
-        status = "Online"
+    # Se a placa não comunicar por mais de 7s, considera offline internamente
+    status = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 7 else "Online"
         
-    # Cálculo de Economia Verde Dinâmica (0% a 100% proporcional à luz do sol)
     taxa_economia = round((luz / 1024.0) * 100)
     taxa_economia = max(0, min(100, taxa_economia))
     
-    # Lógica de Clima Regional acoplada à luminosidade
     temp = 25 if luz > 400 else 18
     umid = 50 if luz > 400 else 80
     desc = "Ensolarado" if luz > 500 else "Nublado / Noite"
@@ -66,7 +59,8 @@ def get_luz():
     return jsonify({
         "luz": luz,
         "status": status,
-        "consumo": round(dados_sensor["consumo_acumulado"], 5),
+        # Formata o consumo para ter apenas 4 casas decimais (ex: 0.0065)
+        "consumo": f'{dados_sensor["consumo_acumulado"]:.4f}', 
         "economia": taxa_economia,
         "clima": clima_string
     })
@@ -85,9 +79,9 @@ def index():
     </head>
     <body class="bg-slate-50 min-h-screen">
         <div class="max-w-4xl mx-auto p-6">
+            
             <div class="flex justify-between items-center mb-8">
                 <h1 class="text-3xl font-bold text-slate-800">🌿 EcoLight Solutions</h1>
-                <div id="status" class="px-4 py-1 rounded-full font-bold text-white transition-all duration-300">Verificando...</div>
             </div>
 
             <div class="flex gap-4 mb-6">
@@ -110,7 +104,7 @@ def index():
                 </div>
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <p class="text-slate-500 font-medium">Consumo da Maquete</p>
-                    <h2 class="text-3xl font-bold text-red-600 mt-3" id="valor-consumo">0.00000 kWh</h2>
+                    <h2 class="text-4xl font-bold text-red-600 mt-3" id="valor-consumo">0.0000 kWh</h2>
                 </div>
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <p class="text-slate-500 font-medium">Eficiência / Economia</p>
@@ -148,13 +142,7 @@ def index():
                     const luz = parseInt(data.luz);
                     const statusPlaca = data.status;
                     
-                    const statusElemento = document.getElementById('status');
-                    statusElemento.innerText = statusPlaca;
-                    
                     if (statusPlaca === "Online") {
-                        statusElemento.className = "px-4 py-1 rounded-full bg-green-500 text-white font-bold animate-pulse";
-                        
-                        // injeta as novas variáveis calculadas no back-end direto nos IDs corretos
                         document.getElementById('valor-luz').innerText = luz;
                         document.getElementById('valor-clima').innerText = data.clima;
                         document.getElementById('valor-consumo').innerText = data.consumo + " kWh";
@@ -165,15 +153,8 @@ def index():
                         } else {
                             document.getElementById('alerta-box').classList.add('hidden');
                         }
-                    } else {
-                        statusElemento.className = "px-4 py-1 rounded-full bg-red-500 text-white font-bold";
-                        document.getElementById('valor-luz').innerText = "Desconectado";
-                        document.getElementById('valor-clima').innerText = "Sem Dados";
-                        document.getElementById('valor-economia').innerText = "0%";
-                        document.getElementById('alerta-box').classList.add('hidden');
-                    }
-                    
-                    if (statusPlaca === "Online") {
+                        
+                        // Atualiza o Gráfico
                         const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         if(!chart) {
                             chart = new Chart(document.getElementById('grafico'), { 
@@ -200,11 +181,14 @@ def index():
                             }
                             chart.update();
                         }
+                    } else {
+                        // Se a placa desligar, o sistema alerta de forma discreta nos cards
+                        document.getElementById('valor-luz').innerText = "Desconectado";
+                        document.getElementById('valor-clima').innerText = "Aguardando";
+                        document.getElementById('alerta-box').classList.add('hidden');
                     }
                 } catch (error) {
-                    console.error("Erro ao buscar dados:", error);
-                    document.getElementById('status').className = "px-4 py-1 rounded-full bg-red-500 text-white font-bold";
-                    document.getElementById('status').innerText = "Erro Servidor";
+                    console.error("Erro ao buscar dados do servidor:", error);
                 }
             }
             setInterval(atualizar, 2000);
