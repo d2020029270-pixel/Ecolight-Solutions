@@ -1,10 +1,10 @@
 from flask import Flask, render_template_string, jsonify, request
 import os
-import time  # <--- IMPORTANTE: Adiciona esta linha
+import time
 
 app = Flask(__name__)
 
-# Adicionamos "ultima_atualizacao" para saber quando o ESP mandou o dado
+# Variável global para armazenar a última leitura do sensor e o tempo
 dados_sensor = {
     "luz": 0,
     "ultima_atualizacao": 0
@@ -12,17 +12,27 @@ dados_sensor = {
 
 @app.route("/update")
 def update():
-    """Rota para o ESP8266 enviar dados"""
-    luz = request.args.get("luz", 0, type=int)
-    dados_sensor["luz"] = luz
-    dados_sensor["ultima_atualizacao"] = time.time()  # Guarda o segundo atual do servidor
+    """Rota para o ESP8266 enviar dados de forma robusta"""
+    # Recebe o valor como texto para podermos limpar qualquer caractere invisível
+    luz_bruta = request.args.get("luz", "0")
+    
+    # Filtra apenas os números, eliminando aspas, espaços ou lixo de requisição HTTPS
+    luz_limpa = ''.join(filter(str.isdigit, str(luz_bruta)))
+    
+    if luz_limpa:
+        dados_sensor["luz"] = int(luz_limpa)
+    else:
+        dados_sensor["luz"] = 0
+        
+    dados_sensor["ultima_atualizacao"] = time.time()  # Registra o momento do envio
     return "OK"
 
 @app.route("/api/get-luz")
 def get_luz():
-    """Rota para o site consultar o valor e o status"""
+    """Rota para o frontend consultar o valor atual e o status"""
     agora = time.time()
-    # Se o último dado recebido foi há mais de 7 segundos, consideramos Offline
+    
+    # Se a placa não mandar dados por mais de 7 segundos, assume que está Offline
     if agora - dados_sensor["ultima_atualizacao"] > 7:
         status = "Offline"
     else:
@@ -75,6 +85,7 @@ def index():
 
         <script>
             let chart;
+
             function mostrar(tab) {
                 document.getElementById('painel').classList.add('hidden');
                 document.getElementById('historico').classList.add('hidden');
@@ -87,9 +98,8 @@ def index():
                     const data = await res.json();
                     
                     const luz = parseInt(data.luz);
-                    const statusPlaca = data.status; // Recebe se está Online ou Offline
+                    const statusPlaca = data.status;
                     
-                    // --- NOVA LÓGICA DE STATUS VISUAL ---
                     const statusElemento = document.getElementById('status');
                     statusElemento.innerText = statusPlaca;
                     
@@ -97,23 +107,32 @@ def index():
                         statusElemento.className = "px-4 py-1 rounded-full bg-green-500 text-white font-bold animate-pulse";
                         document.getElementById('valor-luz').innerText = luz;
                         
-                        // Só atualiza o alerta e o gráfico se a placa estiver online
-                        if(luz < 300) document.getElementById('alerta-box').classList.remove('hidden');
-                        else document.getElementById('alerta-box').classList.add('hidden');
+                        if(luz < 300) {
+                            document.getElementById('alerta-box').classList.remove('hidden');
+                        } else {
+                            document.getElementById('alerta-box').classList.add('hidden');
+                        }
                     } else {
-                        // Se estiver Offline, muda para vermelho e tira a animação
                         statusElemento.className = "px-4 py-1 rounded-full bg-red-500 text-white font-bold";
                         document.getElementById('valor-luz').innerText = "Desconectado";
                         document.getElementById('alerta-box').classList.add('hidden');
                     }
                     
-                    // Só atualiza o gráfico se estiver online para não encher de lixo o histórico
                     if (statusPlaca === "Online") {
                         const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         if(!chart) {
                             chart = new Chart(document.getElementById('grafico'), { 
                                 type: 'line', 
-                                data: { labels: [agora], datasets: [{label: 'LDR', data: [luz], borderColor: '#2563eb'}] } 
+                                data: { 
+                                    labels: [agora], 
+                                    datasets: [{
+                                        label: 'LDR', 
+                                        data: [luz], 
+                                        borderColor: '#2563eb',
+                                        tension: 0.2
+                                    }] 
+                                },
+                                options: { responsive: true }
                             });
                         } else {
                             chart.data.labels.push(agora);
@@ -126,7 +145,7 @@ def index():
                         }
                     }
                 } catch (error) {
-                    console.error("Erro ao buscar dados do servidor:", error);
+                    console.error("Erro ao buscar dados:", error);
                     document.getElementById('status').className = "px-4 py-1 rounded-full bg-red-500 text-white font-bold";
                     document.getElementById('status').innerText = "Erro Servidor";
                 }
@@ -138,5 +157,6 @@ def index():
     """)
 
 if __name__ == "__main__":
+    # Garante a porta dinâmica exigida pelo Render
     porta = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=porta)
