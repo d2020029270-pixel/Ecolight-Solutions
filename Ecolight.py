@@ -76,84 +76,84 @@ def index():
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
-    <body class="bg-slate-50 min-h-screen flex flex-col">
+    <body class="bg-[#0a0a0a] min-h-screen flex flex-col text-slate-200">
         <div class="max-w-5xl mx-auto p-6 flex-grow w-full">
             
-            <div class="flex items-center gap-3 mb-8 border-b border-slate-200 pb-4">
-                <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+            <div class="flex items-center gap-3 mb-8 border-b border-gray-800 pb-4">
+                <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.5)]">
                     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                 </div>
                 <div>
-                    <h1 class="text-3xl font-bold text-slate-800 tracking-tight">EcoLight Solutions</h1>
-                    <p class="text-sm text-slate-500 font-medium">Painel de Monitoramento Inteligente</p>
+                    <h1 class="text-3xl font-bold text-white tracking-tight">EcoLight Solutions</h1>
+                    <p class="text-sm text-blue-400 font-medium">Painel de Monitoramento Inteligente</p>
                 </div>
             </div>
 
             <div class="flex gap-3 mb-6">
-                <button id="btn-painel" onclick="mostrar('painel')" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold transition shadow-sm text-sm">Painel Principal</button>
-                <button id="btn-historico" onclick="mostrar('historico')" class="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-50 transition shadow-sm text-sm">Análise Histórica</button>
+                <button id="btn-painel" onclick="mostrar('painel')" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold transition shadow-[0_0_10px_rgba(37,99,235,0.3)] text-sm">Painel Principal</button>
+                <button id="btn-historico" onclick="mostrar('historico')" class="px-5 py-2.5 bg-gray-900 border border-gray-800 text-slate-400 rounded-lg font-bold hover:bg-gray-800 hover:text-white transition shadow-sm text-sm">Análise Histórica</button>
             </div>
 
-            <div id="alerta-box" class="bg-orange-50 border border-orange-200 text-orange-800 p-4 mb-6 hidden rounded-xl shadow-sm flex items-center gap-3">
-                <svg class="w-6 h-6 text-orange-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <div id="alerta-box" class="bg-blue-950/40 border border-blue-800/50 text-blue-200 p-4 mb-6 hidden rounded-xl shadow-sm flex items-center gap-3">
+                <svg class="w-6 h-6 text-blue-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                 <span><strong>Atenção:</strong> Baixa luminosidade detectada. O sistema de iluminação artificial foi ativado.</span>
             </div>
 
             <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-blue-500/50 transition-colors">
                     <div class="flex items-center justify-between mb-4">
-                        <p class="text-slate-500 font-semibold text-sm">Luminosidade (LDR)</p>
-                        <div class="p-2 bg-blue-50 rounded-lg"><svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg></div>
+                        <p class="text-slate-400 font-semibold text-sm">Luminosidade (LDR)</p>
+                        <div class="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg></div>
                     </div>
-                    <h2 class="text-4xl font-black text-slate-800" id="valor-luz">--</h2>
+                    <h2 class="text-4xl font-black text-white" id="valor-luz">--</h2>
                 </div>
 
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-cyan-500/50 transition-colors">
                     <div class="flex items-center justify-between mb-4">
-                        <p class="text-slate-500 font-semibold text-sm">Clima Regional</p>
-                        <div class="p-2 bg-sky-50 rounded-lg"><svg class="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg></div>
+                        <p class="text-slate-400 font-semibold text-sm">Clima Regional</p>
+                        <div class="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20"><svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg></div>
                     </div>
-                    <h2 class="text-xl font-bold text-slate-700" id="valor-clima">--</h2>
+                    <h2 class="text-xl font-bold text-slate-200" id="valor-clima">--</h2>
                 </div>
 
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-indigo-500/50 transition-colors">
                     <div class="flex items-center justify-between mb-4">
-                        <p class="text-slate-500 font-semibold text-sm">Consumo / Custo</p>
-                        <div class="p-2 bg-red-50 rounded-lg"><svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div>
+                        <p class="text-slate-400 font-semibold text-sm">Consumo / Custo</p>
+                        <div class="p-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20"><svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div>
                     </div>
                     <div>
-                        <h2 class="text-2xl font-bold text-slate-800" id="valor-consumo">0.0000 <span class="text-sm text-slate-400 font-medium">kWh</span></h2>
-                        <p class="text-sm font-semibold text-red-500 mt-1" id="valor-custo">R$ 0,00</p>
+                        <h2 class="text-2xl font-bold text-white" id="valor-consumo">0.0000 <span class="text-sm text-slate-500 font-medium">kWh</span></h2>
+                        <p class="text-sm font-semibold text-indigo-400 mt-1" id="valor-custo">R$ 0,00</p>
                     </div>
                 </div>
 
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-teal-500/50 transition-colors">
                     <div class="flex items-center justify-between mb-2">
-                        <p class="text-slate-500 font-semibold text-sm">Eficiência Verde</p>
-                        <div class="p-2 bg-green-50 rounded-lg"><svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg></div>
+                        <p class="text-slate-400 font-semibold text-sm">Eficiência Verde</p>
+                        <div class="p-2 bg-teal-500/10 rounded-lg border border-teal-500/20"><svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg></div>
                     </div>
                     <div>
-                        <h2 class="text-3xl font-black text-green-600" id="valor-economia">--%</h2>
-                        <div class="w-full bg-slate-100 rounded-full h-2 mt-3">
-                            <div class="bg-green-500 h-2 rounded-full transition-all duration-500" id="barra-economia" style="width: 0%"></div>
+                        <h2 class="text-3xl font-black text-teal-400" id="valor-economia">--%</h2>
+                        <div class="w-full bg-gray-800 rounded-full h-2 mt-3">
+                            <div class="bg-teal-500 h-2 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(20,184,166,0.6)]" id="barra-economia" style="width: 0%"></div>
                         </div>
                     </div>
                 </div>
 
             </div>
 
-            <div id="historico" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mt-6">
+            <div id="historico" class="hidden bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-800 mt-6">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-bold text-slate-700">Gráfico de Leitura LDR</h3>
-                    <span class="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">Últimos minutos</span>
+                    <h3 class="text-lg font-bold text-white">Gráfico de Leitura LDR</h3>
+                    <span class="text-xs font-semibold text-blue-400 bg-blue-900/30 border border-blue-800/50 px-3 py-1 rounded-full">Últimos minutos</span>
                 </div>
                 <canvas id="grafico" class="w-full h-64"></canvas>
             </div>
         </div>
 
-        <footer class="border-t border-slate-200 py-6 mt-12 bg-white text-center text-sm text-slate-500">
-            <p><strong>EcoLight Solutions</strong> &copy; 2024 - Todos os direitos reservados.</p>
+        <footer class="border-t border-gray-800 py-6 mt-12 bg-[#0a0a0a] text-center text-sm text-slate-600">
+            <p><strong class="text-slate-400">EcoLight Solutions</strong> &copy; 2024 - Todos os direitos reservados.</p>
             <p class="text-xs mt-1">Monitoramento Sustentável por ESP8266 & Flask.</p>
         </footer>
 
@@ -165,8 +165,8 @@ def index():
                 document.getElementById('historico').classList.add('hidden');
                 document.getElementById(tab).classList.remove('hidden');
                 
-                const btnActive = "px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold transition shadow-sm text-sm";
-                const btnInactive = "px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-lg font-bold hover:bg-slate-50 transition shadow-sm text-sm";
+                const btnActive = "px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold transition shadow-[0_0_10px_rgba(37,99,235,0.3)] text-sm";
+                const btnInactive = "px-5 py-2.5 bg-gray-900 border border-gray-800 text-slate-400 rounded-lg font-bold hover:bg-gray-800 hover:text-white transition shadow-sm text-sm";
 
                 if(tab === 'painel') {
                     document.getElementById('btn-painel').className = btnActive;
@@ -187,27 +187,27 @@ def index():
                         document.getElementById('valor-clima').innerText = data.clima;
                         document.getElementById('valor-consumo').innerText = data.consumo;
                         
-                        // Atualiza o Custo Financeiro formatado
                         document.getElementById('valor-custo').innerText = "R$ " + data.custo.replace('.', ',');
                         
-                        // Atualiza a barra e texto de economia
                         document.getElementById('valor-economia').innerText = data.economia + "%";
                         document.getElementById('barra-economia').style.width = data.economia + "%";
                         
-                        // Alerta
                         if(data.luz < 300) {
                             document.getElementById('alerta-box').classList.remove('hidden');
                         } else {
                             document.getElementById('alerta-box').classList.add('hidden');
                         }
                         
-                        // Gráfico
+                        // Configuração do Gráfico para Dark Mode
+                        Chart.defaults.color = '#94a3b8';
+                        Chart.defaults.borderColor = '#334155';
+                        
                         const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         if(!chart) {
                             chart = new Chart(document.getElementById('grafico'), { 
                                 type: 'line', 
-                                data: { labels: [agora], datasets: [{ label: 'Luminosidade', data: [data.luz], borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.3 }] },
-                                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1024 } } }
+                                data: { labels: [agora], datasets: [{ label: 'Luminosidade', data: [data.luz], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.15)', fill: true, tension: 0.3, pointBackgroundColor: '#60a5fa' }] },
+                                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1024, grid: {color: '#1e293b'} }, x: { grid: {color: '#1e293b'} } } }
                             });
                         } else {
                             chart.data.labels.push(agora);
