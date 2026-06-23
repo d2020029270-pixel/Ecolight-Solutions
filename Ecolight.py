@@ -9,7 +9,8 @@ dados_sensor = {
     "luz": 0,
     "ultima_atualizacao": 0,
     "energia_gerada_kwh": 0.0,
-    "tempo_eco_acumulado": 0.0
+    "tempo_eco_acumulado": 0.0,
+    "tempo_total_rodando": 0.0  # Necessário para calcular a taxa de projeção mensal
 }
 
 # Constantes de Engenharia para a Simulação Solar
@@ -22,6 +23,9 @@ def recalcular_energia(valor_luz):
     if dados_sensor["ultima_atualizacao"] > 0:
         tempo_passado = agora - dados_sensor["ultima_atualizacao"]
         horas_passadas = tempo_passado / 3600.0
+        
+        # Registra o tempo total que o servidor está coletando dados
+        dados_sensor["tempo_total_rodando"] += horas_passadas
         
         # Calcula a potência gerada instantânea baseada na luz (0 a 500W)
         potencia_atual_w = (valor_luz / 1023.0) * POTENCIA_MAX_W
@@ -66,8 +70,21 @@ def get_luz():
     potencia_w = (luz / 1023.0) * POTENCIA_MAX_W
     
     # Cálculo Financeiro (Dinheiro Economizado/Gerado) e Sustentabilidade
-    economia_rs = dados_sensor["energia_gerada_kwh"] * TARIFA_KWH
-    co2_poupado = dados_sensor["energia_gerada_kwh"] * EMISSAO_CO2_POR_KWH_GRAMAS
+    energia_acumulada = dados_sensor["energia_gerada_kwh"]
+    economia_rs = energia_acumulada * TARIFA_KWH
+    co2_poupado = energia_acumulada * EMISSAO_CO2_POR_KWH_GRAMAS
+    
+    # Lógica de Projeção Mensal Baseada no Histórico Real de Execução (30 dias = 720 horas)
+    tempo_decorrido = dados_sensor["tempo_total_rodando"]
+    if tempo_decorrido > 0.0001:
+        fator_mensal = 720.0 / tempo_decorrido
+        proj_energia_mes = energia_acumulada * fator_mensal
+    else:
+        # Fallback inicial caso acabe de ligar o servidor
+        proj_energia_mes = (potencia_w / 1000.0) * 5.0 * 30.0 # Simula 5h de sol por dia
+        
+    proj_economia_mes = proj_energia_mes * TARIFA_KWH
+    proj_co2_mes = proj_energia_mes * EMISSAO_CO2_POR_KWH_GRAMAS
         
     return jsonify({
         "luz": luz,
@@ -75,10 +92,15 @@ def get_luz():
         "tensao": f"{tensao_calculada:.2f}",
         "lux": lux_estimado,
         "potencia_w": f"{potencia_w:.1f}",
-        "energia_kwh": f'{dados_sensor["energia_gerada_kwh"]:.6f}', 
+        "energia_kwh": f'{energia_acumulada:.6f}', 
         "economia_rs": f'{economia_rs:.4f}',
         "eficiencia": taxa_eficiencia,
-        "co2": f"{co2_poupado:.2f}"
+        "co2": f"{co2_poupado:.2f}",
+        
+        # Dados do Resumo Mensal Projetado
+        "proj_energia": f"{proj_energia_mes:.2f}",
+        "proj_economia": f"{proj_economia_mes:.2f}",
+        "proj_co2": f"{proj_co2_mes:.1f}"
     })
 
 @app.route("/")
@@ -122,7 +144,7 @@ def index():
                 </div>
             </div>
 
-            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 
                 <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-blue-500/50 transition-colors">
                     <div class="flex items-center justify-between mb-4">
@@ -174,10 +196,49 @@ def index():
                         </div>
                     </div>
                 </div>
-
             </div>
 
-            <div id="historico" class="bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-800 mt-6">
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 mb-8 hover:border-emerald-500/30 transition-colors">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-xl">📊</span>
+                    <h3 class="text-lg font-bold text-white">Relatório Comparativo e Projeção Mensal</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead>
+                            <tr class="border-b border-gray-800 text-slate-400 font-semibold">
+                                <th class="pb-3">Indicador de Impacto</th>
+                                <th class="pb-3 text-center">Produção Atual (Real)</th>
+                                <th class="pb-3 text-center text-emerald-400">Projeção 30 Dias 🚀</th>
+                                <th class="pb-3 text-center text-blue-400">Meta da Usina (Ideal)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800/50 text-slate-300">
+                            <tr>
+                                <td class="py-3.5 font-medium flex items-center gap-2">⚡ Energia Acumulada</td>
+                                <td class="py-3.5 text-center font-mono" id="table-real-energia">0.0000 kWh</td>
+                                <td class="py-3.5 text-center font-bold text-emerald-400 font-mono" id="table-proj-energia">-- kWh</td>
+                                <td class="py-3.5 text-center text-blue-400 font-mono">75.00 kWh</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 font-medium flex items-center gap-2">💰 Economia Financeira</td>
+                                <td class="py-3.5 text-center font-mono text-indigo-400" id="table-real-economia">R$ 0,00</td>
+                                <td class="py-3.5 text-center font-bold text-emerald-400 font-mono" id="table-proj-economia">R$ --</td>
+                                <td class="py-3.5 text-center text-blue-400 font-mono">R$ 71,25</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 font-medium flex items-center gap-2">🌱 Carbono Evitado (CO₂)</td>
+                                <td class="py-3.5 text-center font-mono text-green-400" id="table-real-co2">0.00 g</td>
+                                <td class="py-3.5 text-center font-bold text-emerald-400 font-mono" id="table-proj-co2">-- g</td>
+                                <td class="py-3.5 text-center text-blue-400 font-mono">6.37 kg</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-3 italic text-right">*Projeções calculadas dinamicamente via algoritmo preditivo com base na taxa de irradiância lida pelo LDR.</p>
+            </div>
+
+            <div id="historico" class="bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-800">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-bold text-white">Gráfico de Potência Instantânea</h3>
                     <span class="text-xs font-semibold text-cyan-400 bg-cyan-900/30 border border-cyan-800/50 px-3 py-1 rounded-full">Watts Gerados</span>
@@ -191,19 +252,15 @@ def index():
         <script>
             let chart;
 
-            // Função para buscar o clima de Itajubá-MG (Latitude: -22.4256, Longitude: -45.4528)
+            // Função para buscar o clima de Itajubá-MG
             async function fetchClima() {
                 try {
                     const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-22.4256&longitude=-45.4528&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo');
                     const data = await res.json();
-                    
                     const temp = data.current.temperature_2m;
                     const code = data.current.weather_code;
                     
-                    // Decodifica o código da Organização Meteorológica Mundial
-                    let desc = "Estável";
-                    let icon = "☁️";
-                    
+                    let desc = "Estável"; let icon = "☁️";
                     if (code === 0) { desc = "Céu Limpo"; icon = "☀️"; }
                     else if (code <= 3) { desc = "Parcialmente Nublado"; icon = "⛅"; }
                     else if (code <= 48) { desc = "Neblina"; icon = "🌫️"; }
@@ -216,11 +273,9 @@ def index():
                     document.getElementById('weather-icon').innerText = icon;
                 } catch (error) {
                     console.error("Erro ao carregar clima:", error);
-                    document.getElementById('weather-desc').innerText = "Indisponível";
                 }
             }
 
-            // Inicia o clima ao carregar a página e atualiza a cada 30 minutos
             fetchClima();
             setInterval(fetchClima, 30 * 60 * 1000);
 
@@ -242,6 +297,15 @@ def index():
                         document.getElementById('valor-eficiencia').innerText = data.eficiencia + "%";
                         document.getElementById('barra-eficiencia').style.width = data.eficiencia + "%";
                         document.getElementById('valor-co2').innerText = data.co2.replace('.', ',') + " g";
+                        
+                        // Atualização da Tabela de Resumo/Projeção Mensal
+                        document.getElementById('table-real-energia').innerText = data.energia_kwh + " kWh";
+                        document.getElementById('table-real-economia').innerText = "R$ " + data.economia_rs.substring(0,6).replace('.', ',');
+                        document.getElementById('table-real-co2').innerText = data.co2.replace('.', ',') + " g";
+                        
+                        document.getElementById('table-proj-energia').innerText = data.proj_energia.replace('.', ',') + " kWh";
+                        document.getElementById('table-proj-economia').innerText = "R$ " + data.proj_economia.replace('.', ',');
+                        document.getElementById('table-proj-co2').innerText = (parseFloat(data.proj_co2) >= 1000) ? (parseFloat(data.proj_co2)/1000).toFixed(2).replace('.', ',') + " kg" : data.proj_co2.replace('.', ',') + " g";
                         
                         // Badge Dinâmico
                         const badge = document.getElementById('badge-modo');
