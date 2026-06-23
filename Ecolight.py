@@ -94,9 +94,9 @@ def index():
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
     <body class="bg-[#0a0a0a] min-h-screen flex flex-col text-slate-200">
-        <div class="max-w-5xl mx-auto p-6 flex-grow w-full">
+        <div class="max-w-6xl mx-auto p-6 flex-grow w-full">
             
-            <div class="flex items-center justify-between mb-8 border-b border-gray-800 pb-4">
+            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 border-b border-gray-800 pb-4 gap-4">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.5)]">
                         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
@@ -106,8 +106,19 @@ def index():
                         <p class="text-sm text-blue-400 font-medium">Telemetria de Geração Fotovoltaica</p>
                     </div>
                 </div>
-                <div id="badge-modo" class="hidden md:flex px-4 py-2 rounded-full text-sm font-bold border transition-all duration-300">
-                    --
+                
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-3 px-4 py-2 rounded-xl bg-gray-900 border border-gray-800 shadow-sm min-w-[180px]">
+                        <span id="weather-icon" class="text-2xl drop-shadow-md">⛅</span>
+                        <div>
+                            <p class="text-xs text-slate-400 font-semibold tracking-wide">ITAJUBÁ, MG</p>
+                            <p class="text-sm font-bold text-white"><span id="weather-temp">-- °C</span> <span class="text-xs text-slate-500 font-normal ml-1" id="weather-desc">Buscando...</span></p>
+                        </div>
+                    </div>
+
+                    <div id="badge-modo" class="hidden md:flex px-4 py-2.5 rounded-xl text-sm font-bold border transition-all duration-300">
+                        --
+                    </div>
                 </div>
             </div>
 
@@ -180,6 +191,39 @@ def index():
         <script>
             let chart;
 
+            // Função para buscar o clima de Itajubá-MG (Latitude: -22.4256, Longitude: -45.4528)
+            async function fetchClima() {
+                try {
+                    const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-22.4256&longitude=-45.4528&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo');
+                    const data = await res.json();
+                    
+                    const temp = data.current.temperature_2m;
+                    const code = data.current.weather_code;
+                    
+                    // Decodifica o código da Organização Meteorológica Mundial
+                    let desc = "Estável";
+                    let icon = "☁️";
+                    
+                    if (code === 0) { desc = "Céu Limpo"; icon = "☀️"; }
+                    else if (code <= 3) { desc = "Parcialmente Nublado"; icon = "⛅"; }
+                    else if (code <= 48) { desc = "Neblina"; icon = "🌫️"; }
+                    else if (code <= 67) { desc = "Chuvoso"; icon = "🌧️"; }
+                    else if (code <= 77) { desc = "Frio Extremo"; icon = "❄️"; }
+                    else { desc = "Tempestade"; icon = "⛈️"; }
+
+                    document.getElementById('weather-temp').innerText = Math.round(temp) + " °C";
+                    document.getElementById('weather-desc').innerText = desc;
+                    document.getElementById('weather-icon').innerText = icon;
+                } catch (error) {
+                    console.error("Erro ao carregar clima:", error);
+                    document.getElementById('weather-desc').innerText = "Indisponível";
+                }
+            }
+
+            // Inicia o clima ao carregar a página e atualiza a cada 30 minutos
+            fetchClima();
+            setInterval(fetchClima, 30 * 60 * 1000);
+
             async function atualizar() {
                 try {
                     const res = await fetch('/api/get-luz');
@@ -202,14 +246,14 @@ def index():
                         // Badge Dinâmico
                         const badge = document.getElementById('badge-modo');
                         if (data.luz >= 100) {
-                            badge.className = "hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold border border-green-500/50 bg-green-500/10 text-green-400 shadow-[0_0_10px_rgba(34,197,94,0.2)]";
+                            badge.className = "hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border border-green-500/50 bg-green-500/10 text-green-400 shadow-[0_0_10px_rgba(34,197,94,0.2)]";
                             badge.innerHTML = "☀️ Gerando Energia";
                         } else {
-                            badge.className = "hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold border border-slate-500/50 bg-slate-500/10 text-slate-400";
+                            badge.className = "hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border border-slate-600/50 bg-slate-800/80 text-slate-400";
                             badge.innerHTML = "🌙 Baixa Captação";
                         }
                         
-                        // Gráfico Dark Mode (Agora mapeando os Watts!)
+                        // Gráfico Dark Mode
                         Chart.defaults.color = '#94a3b8';
                         Chart.defaults.borderColor = '#334155';
                         
