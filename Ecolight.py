@@ -4,19 +4,22 @@ import time
 
 app = Flask(__name__)
 
-# Dicionário global
+# Dicionário global atualizado com o banco de baterias virtual
 dados_sensor = {
     "luz": 0,
     "ultima_atualizacao": 0,
     "energia_gerada_kwh": 0.0,
     "tempo_eco_acumulado": 0.0,
-    "tempo_total_rodando": 0.0  # Necessário para calcular a taxa de projeção mensal
+    "tempo_total_rodando": 0.0,
+    "bateria_porcentagem": 0.0, # Estado de carga da bateria (0 a 100%)
+    "status_rele": 0            # 0 = Desligado, 1 = Ligado (Descarte de energia)
 }
 
-# Constantes de Engenharia para a Simulação Solar
+# Constantes de Engenharia
 TARIFA_KWH = 0.95
-POTENCIA_MAX_W = 500.0 # Painel simulado de 500 Watts
+POTENCIA_MAX_W = 500.0 
 EMISSAO_CO2_POR_KWH_GRAMAS = 85.0
+CAPACIDADE_BATERIA_KWH = 0.05 # Tamanho do banco de baterias simulado
 
 def recalcular_energia(valor_luz):
     agora = time.time()
@@ -24,17 +27,36 @@ def recalcular_energia(valor_luz):
         tempo_passado = agora - dados_sensor["ultima_atualizacao"]
         horas_passadas = tempo_passado / 3600.0
         
-        # Registra o tempo total que o servidor está coletando dados
         dados_sensor["tempo_total_rodando"] += horas_passadas
         
-        # Calcula a potência gerada instantânea baseada na luz (0 a 500W)
+        # Geração atual
         potencia_atual_w = (valor_luz / 1023.0) * POTENCIA_MAX_W
         potencia_atual_kw = potencia_atual_w / 1000.0
         
-        # Acumula a energia gerada (kWh)
+        # Acumula energia total
         dados_sensor["energia_gerada_kwh"] += potencia_atual_kw * horas_passadas
         
-        # Se está gerando energia (Luz > 300), conta como tempo sustentável
+        # --- LÓGICA DA BATERIA VIRTUAL E AUTOMAÇÃO ---
+        # Se o relé de descarte estiver DESLIGADO, a energia gerada vai para a bateria
+        if dados_sensor["status_rele"] == 0:
+            # Carrega a bateria (energia gerada multiplicada para simular carregamento rápido na maquete)
+            dados_sensor["bateria_porcentagem"] += (potencia_atual_kw * horas_passadas * 500) / CAPACIDADE_BATERIA_KWH
+            if dados_sensor["bateria_porcentagem"] >= 100.0:
+                dados_sensor["bateria_porcentagem"] = 100.0
+                dados_sensor["status_rele"] = 1 # Bateria cheia! Ativa o descarte de energia sobressalente
+        else:
+            # Se o relé está LIGADO, o aparelho consome energia e descarrega um pouco a bateria se o sol diminuir
+            consumo_aparelho_kw = 0.250 # Aparelho simulado consome 250W
+            saldo_energia = potencia_atual_kw - consumo_aparelho_kw
+            dados_sensor["bateria_porcentagem"] += (saldo_energia * horas_passadas * 500) / CAPACIDADE_BATERIA_KWH
+            
+            # Limite de segurança: se a bateria cair abaixo de 75%, desliga o aparelho para proteger o sistema
+            if dados_sensor["bateria_porcentagem"] <= 75.0:
+                dados_sensor["status_rele"] = 0
+                
+        if dados_sensor["bateria_porcentagem"] < 0:
+            dados_sensor["bateria_porcentagem"] = 0.0
+            
         if valor_luz >= 300:
             dados_sensor["tempo_eco_acumulado"] += horas_passadas
             
@@ -48,7 +70,9 @@ def update():
     
     recalcular_energia(valor_final)
     dados_sensor["luz"] = valor_final
-    return "OK"
+    
+    # IMPORTANTE: O ESP8266 vai ler essa resposta para saber se liga ou desliga o pino do Relé!
+    return f"RELE:{dados_sensor['status_rele']}"
 
 @app.route("/api/get-luz")
 def get_luz():
@@ -61,27 +85,20 @@ def get_luz():
     taxa_eficiencia = round((luz / 1024.0) * 100)
     taxa_eficiencia = max(0, min(100, taxa_eficiencia))
     
-    # Cálculos Físicos
     tensao_calculada = (luz / 1023.0) * 3.3
-    tensao_calculada = max(0.0, min(3.3, tensao_calculada))
-    
-    # Estimativa de Iluminância em Lux e Geração Instantânea em Watts
     lux_estimado = int((luz / 1023.0) * 1000)
     potencia_w = (luz / 1023.0) * POTENCIA_MAX_W
     
-    # Cálculo Financeiro (Dinheiro Economizado/Gerado) e Sustentabilidade
     energia_acumulada = dados_sensor["energia_gerada_kwh"]
     economia_rs = energia_acumulada * TARIFA_KWH
     co2_poupado = energia_acumulada * EMISSAO_CO2_POR_KWH_GRAMAS
     
-    # Lógica de Projeção Mensal Baseada no Histórico Real de Execução (30 dias = 720 horas)
     tempo_decorrido = dados_sensor["tempo_total_rodando"]
     if tempo_decorrido > 0.0001:
         fator_mensal = 720.0 / tempo_decorrido
         proj_energia_mes = energia_acumulada * fator_mensal
     else:
-        # Fallback inicial caso acabe de ligar o servidor
-        proj_energia_mes = (potencia_w / 1000.0) * 5.0 * 30.0 # Simula 5h de sol por dia
+        proj_energia_mes = (potencia_w / 1000.0) * 5.0 * 30.0
         
     proj_economia_mes = proj_energia_mes * TARIFA_KWH
     proj_co2_mes = proj_energia_mes * EMISSAO_CO2_POR_KWH_GRAMAS
@@ -96,11 +113,13 @@ def get_luz():
         "economia_rs": f'{economia_rs:.4f}',
         "eficiencia": taxa_eficiencia,
         "co2": f"{co2_poupado:.2f}",
-        
-        # Dados do Resumo Mensal Projetado
         "proj_energia": f"{proj_energia_mes:.2f}",
         "proj_economia": f"{proj_economia_mes:.2f}",
-        "proj_co2": f"{proj_co2_mes:.1f}"
+        "proj_co2": f"{proj_co2_mes:.1f}",
+        
+        # Envia os dados novos da bateria para o painel web
+        "bateria": f"{dados_sensor['bateria_porcentagem']:.1f}",
+        "status_rele": dados_sensor["status_rele"]
     })
 
 @app.route("/")
@@ -125,7 +144,7 @@ def index():
                     </div>
                     <div>
                         <h1 class="text-3xl font-bold text-white tracking-tight">EcoLight Solar</h1>
-                        <p class="text-sm text-blue-400 font-medium">Telemetria de Geração Fotovoltaica</p>
+                        <p class="text-sm text-blue-400 font-medium">Telemetria e Controle de Carga IoT</p>
                     </div>
                 </div>
                 
@@ -137,68 +156,52 @@ def index():
                             <p class="text-sm font-bold text-white"><span id="weather-temp">-- °C</span> <span class="text-xs text-slate-500 font-normal ml-1" id="weather-desc">Buscando...</span></p>
                         </div>
                     </div>
-
-                    <div id="badge-modo" class="hidden md:flex px-4 py-2.5 rounded-xl text-sm font-bold border transition-all duration-300">
-                        --
-                    </div>
+                    <div id="badge-modo" class="hidden md:flex px-4 py-2.5 rounded-xl text-sm font-bold border transition-all duration-300">--</div>
                 </div>
             </div>
 
-            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                 
-                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-blue-500/50 transition-colors">
-                    <div class="flex items-center justify-between mb-4">
-                        <p class="text-slate-400 font-semibold text-sm">Leitura Óptica</p>
-                        <div class="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg></div>
-                    </div>
-                    <div>
-                        <h2 class="text-4xl font-black text-white" id="valor-luz">--</h2>
-                        <div class="flex gap-4 mt-2">
-                            <p class="text-sm font-semibold text-blue-400" id="valor-tensao">0.00 V</p>
-                            <p class="text-sm font-semibold text-amber-400" id="valor-lux">0 Lux</p>
-                        </div>
+                <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex flex-col justify-between">
+                    <p class="text-slate-400 font-semibold text-xs">Leitura Óptica</p>
+                    <h2 class="text-3xl font-black text-white mt-2" id="valor-luz">--</h2>
+                    <div class="flex gap-2 mt-1">
+                        <p class="text-xs font-semibold text-blue-400" id="valor-tensao">0.00 V</p>
+                        <p class="text-xs font-semibold text-amber-400" id="valor-lux">0 Lux</p>
                     </div>
                 </div>
 
-                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-cyan-500/50 transition-colors relative overflow-hidden">
-                    <div class="absolute -right-4 -top-4 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl"></div>
-                    <div class="flex items-center justify-between mb-4 relative">
-                        <p class="text-slate-400 font-semibold text-sm">Geração do Painel</p>
-                        <div class="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20"><svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+                <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex flex-col justify-between">
+                    <p class="text-slate-400 font-semibold text-xs">Geração Solar</p>
+                    <h2 class="text-3xl font-bold text-white mt-2" id="valor-potencia">0.0 W</h2>
+                    <p class="text-[10px] font-semibold text-cyan-400 mt-1" id="valor-energia-kwh">Total: 0.00 kWh</p>
+                </div>
+
+                <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex flex-col justify-between hover:border-amber-500/40 transition-colors">
+                    <div class="flex justify-between items-center">
+                        <p class="text-slate-400 font-semibold text-xs">Banco de Baterias</p>
+                        <span id="bateria-icon" class="text-sm">🔋</span>
                     </div>
-                    <div class="relative">
-                        <h2 class="text-4xl font-bold text-white" id="valor-potencia">0.0 <span class="text-lg text-slate-400 font-medium">W</span></h2>
-                        <p class="text-xs font-semibold text-cyan-400 mt-2 bg-cyan-900/30 inline-block px-2 py-1 rounded border border-cyan-800/50" id="valor-energia-kwh">Total: 0.000000 kWh</p>
+                    <h2 class="text-3xl font-bold text-amber-400 mt-2" id="valor-bateria">0.0%</h2>
+                    <div class="w-full bg-gray-800 h-1.5 rounded-full mt-1 overflow-hidden">
+                        <div id="barra-bateria" class="bg-amber-500 h-full transition-all duration-300" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-indigo-500/50 transition-colors">
-                    <div class="flex items-center justify-between mb-4">
-                        <p class="text-slate-400 font-semibold text-sm">Valor Gerado</p>
-                        <div class="p-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20"><svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
-                    </div>
-                    <h2 class="text-3xl font-bold text-indigo-400" id="valor-economia-rs">R$ 0,00</h2>
+                <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex flex-col justify-between" id="card-rele">
+                    <p class="text-slate-400 font-semibold text-xs">Carga Excedente (Relé)</p>
+                    <h2 class="text-xl font-bold text-slate-400 mt-2" id="status-rele-texto">DESLIGADO</h2>
+                    <p class="text-[10px] text-slate-500 mt-1" id="status-rele-desc">Aguardando Sobra</p>
                 </div>
 
-                <div class="bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-800 flex flex-col justify-between hover:border-teal-500/50 transition-colors">
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="text-slate-400 font-semibold text-sm">Capacidade da Usina</p>
-                        <div class="p-2 bg-teal-500/10 rounded-lg border border-teal-500/20"><svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg></div>
-                    </div>
-                    <div>
-                        <h2 class="text-3xl font-black text-teal-400" id="valor-eficiencia">--%</h2>
-                        <div class="w-full bg-gray-800 rounded-full h-2 mt-2">
-                            <div class="bg-teal-500 h-2 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(20,184,166,0.6)]" id="barra-eficiencia" style="width: 0%"></div>
-                        </div>
-                        <div class="mt-3 flex justify-between items-center text-xs font-semibold text-slate-400 bg-gray-800/50 px-3 py-2 rounded-lg border border-gray-700/50">
-                            <span>🌿 CO₂ Evitado:</span>
-                            <span class="text-green-400" id="valor-co2">0.00 g</span>
-                        </div>
-                    </div>
+                <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex flex-col justify-between">
+                    <p class="text-slate-400 font-semibold text-xs">Economia Total</p>
+                    <h2 class="text-2xl font-bold text-indigo-400 mt-2" id="valor-economia-rs">R$ 0,00</h2>
+                    <p class="text-[10px] text-green-400 mt-1">🌿 CO₂: <span id="valor-co2">0g</span></p>
                 </div>
             </div>
 
-            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 mb-8 hover:border-emerald-500/30 transition-colors">
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 mb-8">
                 <div class="flex items-center gap-2 mb-4">
                     <span class="text-xl">📊</span>
                     <h3 class="text-lg font-bold text-white">Relatório Comparativo e Projeção Mensal</h3>
@@ -226,58 +229,35 @@ def index():
                                 <td class="py-3.5 text-center font-bold text-emerald-400 font-mono" id="table-proj-economia">R$ --</td>
                                 <td class="py-3.5 text-center text-blue-400 font-mono">R$ 71,25</td>
                             </tr>
-                            <tr>
-                                <td class="py-3.5 font-medium flex items-center gap-2">🌱 Carbono Evitado (CO₂)</td>
-                                <td class="py-3.5 text-center font-mono text-green-400" id="table-real-co2">0.00 g</td>
-                                <td class="py-3.5 text-center font-bold text-emerald-400 font-mono" id="table-proj-co2">-- g</td>
-                                <td class="py-3.5 text-center text-blue-400 font-mono">6.37 kg</td>
-                            </tr>
                         </tbody>
                     </table>
                 </div>
-                <p class="text-[11px] text-slate-500 mt-3 italic text-right">*Projeções calculadas dinamicamente via algoritmo preditivo com base na taxa de irradiância lida pelo LDR.</p>
             </div>
 
-            <div id="historico" class="bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-800">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-bold text-white">Gráfico de Potência Instantânea</h3>
-                    <span class="text-xs font-semibold text-cyan-400 bg-cyan-900/30 border border-cyan-800/50 px-3 py-1 rounded-full">Watts Gerados</span>
-                </div>
-                <div class="w-full h-64">
-                    <canvas id="grafico"></canvas>
-                </div>
+            <div id="historico" class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+                <div class="w-full h-64"><canvas id="grafico"></canvas></div>
             </div>
         </div>
 
         <script>
             let chart;
 
-            // Função para buscar o clima de Itajubá-MG
             async function fetchClima() {
                 try {
                     const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-22.4256&longitude=-45.4528&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo');
                     const data = await res.json();
                     const temp = data.current.temperature_2m;
                     const code = data.current.weather_code;
-                    
                     let desc = "Estável"; let icon = "☁️";
                     if (code === 0) { desc = "Céu Limpo"; icon = "☀️"; }
                     else if (code <= 3) { desc = "Parcialmente Nublado"; icon = "⛅"; }
-                    else if (code <= 48) { desc = "Neblina"; icon = "🌫️"; }
-                    else if (code <= 67) { desc = "Chuvoso"; icon = "🌧️"; }
-                    else if (code <= 77) { desc = "Frio Extremo"; icon = "❄️"; }
-                    else { desc = "Tempestade"; icon = "⛈️"; }
-
+                    else { desc = "Chuvoso"; icon = "🌧️"; }
                     document.getElementById('weather-temp').innerText = Math.round(temp) + " °C";
                     document.getElementById('weather-desc').innerText = desc;
                     document.getElementById('weather-icon').innerText = icon;
-                } catch (error) {
-                    console.error("Erro ao carregar clima:", error);
-                }
+                } catch (error) {}
             }
-
             fetchClima();
-            setInterval(fetchClima, 30 * 60 * 1000);
 
             async function atualizar() {
                 try {
@@ -285,76 +265,68 @@ def index():
                     const data = await res.json();
                     
                     if (data.status === "Online") {
-                        // Atualização dos Cards
                         document.getElementById('valor-luz').innerText = data.luz;
                         document.getElementById('valor-tensao').innerText = data.tensao + " V";
                         document.getElementById('valor-lux').innerText = data.lux + " Lux";
-                        
-                        document.getElementById('valor-potencia').innerHTML = data.potencia_w + ' <span class="text-lg text-slate-400 font-medium">W</span>';
+                        document.getElementById('valor-potencia').innerHTML = data.potencia_w + ' W';
                         document.getElementById('valor-energia-kwh').innerText = "Total: " + data.energia_kwh + " kWh";
-                        document.getElementById('valor-economia-rs').innerText = "R$ " + data.economia_rs.replace('.', ',');
-                        
-                        document.getElementById('valor-eficiencia').innerText = data.eficiencia + "%";
-                        document.getElementById('barra-eficiencia').style.width = data.eficiencia + "%";
+                        document.getElementById('valor-economia-rs').innerText = "R$ " + data.economia_rs.substring(0,6).replace('.', ',');
                         document.getElementById('valor-co2').innerText = data.co2.replace('.', ',') + " g";
                         
-                        // Atualização da Tabela de Resumo/Projeção Mensal
+                        // Atualização da Bateria
+                        document.getElementById('valor-bateria').innerText = data.bateria + "%";
+                        document.getElementById('barra-bateria').style.width = data.bateria + "%";
+                        
+                        // Atualização do Relé Dinâmico
+                        const cardRele = document.getElementById('card-rele');
+                        const txtRele = document.getElementById('status-rele-texto');
+                        const descRele = document.getElementById('status-rele-desc');
+                        
+                        if(data.status_rele === 1) {
+                            cardRele.className = "bg-gray-900 p-4 rounded-2xl border border-green-500/40 shadow-[0_0_15px_rgba(34,197,94,0.15)] flex flex-col justify-between transition-all";
+                            txtRele.className = "text-xl font-bold text-green-400 mt-2";
+                            txtRele.innerText = "ATIVADO";
+                            descRele.innerText = "Despejando Excedente";
+                        } else {
+                            cardRele.className = "bg-gray-900 p-4 rounded-2xl border border-gray-800 flex flex-col justify-between transition-all";
+                            txtRele.className = "text-xl font-bold text-slate-500 mt-2";
+                            txtRele.innerText = "DESLIGADO";
+                            descRele.innerText = "Acumulando na Bateria";
+                        }
+
                         document.getElementById('table-real-energia').innerText = data.energia_kwh + " kWh";
                         document.getElementById('table-real-economia').innerText = "R$ " + data.economia_rs.substring(0,6).replace('.', ',');
-                        document.getElementById('table-real-co2').innerText = data.co2.replace('.', ',') + " g";
-                        
                         document.getElementById('table-proj-energia').innerText = data.proj_energia.replace('.', ',') + " kWh";
                         document.getElementById('table-proj-economia').innerText = "R$ " + data.proj_economia.replace('.', ',');
-                        document.getElementById('table-proj-co2').innerText = (parseFloat(data.proj_co2) >= 1000) ? (parseFloat(data.proj_co2)/1000).toFixed(2).replace('.', ',') + " kg" : data.proj_co2.replace('.', ',') + " g";
                         
-                        // Badge Dinâmico
                         const badge = document.getElementById('badge-modo');
-                        if (data.luz >= 100) {
-                            badge.className = "hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border border-green-500/50 bg-green-500/10 text-green-400 shadow-[0_0_10px_rgba(34,197,94,0.2)]";
-                            badge.innerHTML = "☀️ Gerando Energia";
+                        if (data.status_rele === 1) {
+                            badge.className = "hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border border-green-500/50 bg-green-500/10 text-green-400";
+                            badge.innerHTML = "🔋 Bateria Cheia / Smart Grid";
                         } else {
-                            badge.className = "hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border border-slate-600/50 bg-slate-800/80 text-slate-400";
-                            badge.innerHTML = "🌙 Baixa Captação";
+                            badge.className = "hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border border-amber-600/50 bg-amber-900/20 text-amber-400";
+                            badge.innerHTML = "⏳ Carregando Armazenamento";
                         }
                         
-                        // Gráfico Dark Mode
+                        // Gráfico
                         Chart.defaults.color = '#94a3b8';
-                        Chart.defaults.borderColor = '#334155';
-                        
                         const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         if(!chart) {
                             chart = new Chart(document.getElementById('grafico'), { 
                                 type: 'line', 
-                                data: { labels: [agora], datasets: [{ label: 'Potência (W)', data: [data.potencia_w], borderColor: '#06b6d4', backgroundColor: 'rgba(6, 182, 212, 0.15)', fill: true, tension: 0.3, pointBackgroundColor: '#22d3ee' }] },
-                                options: { 
-                                    responsive: true, 
-                                    maintainAspectRatio: false, 
-                                    scales: { 
-                                        y: { min: 0, max: 500, grid: {color: '#1e293b'} }, 
-                                        x: { grid: {color: '#1e293b'} } 
-                                    } 
-                                }
+                                data: { labels: [agora], datasets: [{ label: 'Potência (W)', data: [data.potencia_w], borderColor: '#06b6d4', backgroundColor: 'rgba(6, 182, 212, 0.15)', fill: true, tension: 0.3 }] },
+                                options: { responsive: true, maintainAspectRatio: false }
                             });
                         } else {
                             chart.data.labels.push(agora);
                             chart.data.datasets[0].data.push(data.potencia_w);
-                            
-                            while (chart.data.labels.length > 10) {
-                                chart.data.labels.shift();
-                                chart.data.datasets[0].data.shift();
-                            }
+                            if (chart.data.labels.length > 10) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
                             chart.update();
                         }
-                    } else {
-                        document.getElementById('valor-luz').innerText = "Offline";
-                        document.getElementById('badge-modo').className = "hidden";
                     }
-                } catch (error) {
-                    console.error("Erro no fetch:", error);
-                }
+                } catch (error) {}
             }
             setInterval(atualizar, 2000);
-            atualizar();
         </script>
     </body>
     </html>
