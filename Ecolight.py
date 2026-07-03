@@ -4,7 +4,7 @@ import time
 
 app = Flask(__name__)
 
-# Dicionário global atualizado com o banco de baterias virtual
+# Dicionário global com o banco de baterias virtual
 dados_sensor = {
     "luz": 0,
     "ultima_atualizacao": 0,
@@ -39,22 +39,24 @@ def recalcular_energia(valor_luz):
         # --- LÓGICA DA BATERIA VIRTUAL E AUTOMAÇÃO ---
         # Se o relé de descarte estiver DESLIGADO, a energia gerada vai para a bateria
         if dados_sensor["status_rele"] == 0:
-            # Carrega a bateria (energia gerada multiplicada para simular carregamento rápido na maquete)
             dados_sensor["bateria_porcentagem"] += (potencia_atual_kw * horas_passadas * 500) / CAPACIDADE_BATERIA_KWH
             if dados_sensor["bateria_porcentagem"] >= 100.0:
                 dados_sensor["bateria_porcentagem"] = 100.0
-                dados_sensor["status_rele"] = 1 # Bateria cheia! Ativa o descarte de energia sobressalente
+                dados_sensor["status_rele"] = 1 # Bateria cheia! Ativa o descarte
         else:
-            # Se o relé está LIGADO, o aparelho consome energia e descarrega um pouco a bateria se o sol diminuir
+            # Se o relé está LIGADO, o aparelho consome energia e descarrega um pouco a bateria
             consumo_aparelho_kw = 0.250 # Aparelho simulado consome 250W
             saldo_energia = potencia_atual_kw - consumo_aparelho_kw
             dados_sensor["bateria_porcentagem"] += (saldo_energia * horas_passadas * 500) / CAPACIDADE_BATERIA_KWH
             
-            # Limite de segurança: se a bateria cair abaixo de 75%, desliga o aparelho para proteger o sistema
+            # Limite de segurança para desligar o relé
             if dados_sensor["bateria_porcentagem"] <= 75.0:
                 dados_sensor["status_rele"] = 0
                 
-        if dados_sensor["bateria_porcentagem"] < 0:
+        # === TRAVA DE LIMITES FÍSICOS ===
+        if dados_sensor["bateria_porcentagem"] > 100.0:
+            dados_sensor["bateria_porcentagem"] = 100.0
+        elif dados_sensor["bateria_porcentagem"] < 0.0:
             dados_sensor["bateria_porcentagem"] = 0.0
             
         if valor_luz >= 300:
@@ -116,8 +118,6 @@ def get_luz():
         "proj_energia": f"{proj_energia_mes:.2f}",
         "proj_economia": f"{proj_economia_mes:.2f}",
         "proj_co2": f"{proj_co2_mes:.1f}",
-        
-        # Envia os dados novos da bateria para o painel web
         "bateria": f"{dados_sensor['bateria_porcentagem']:.1f}",
         "status_rele": dados_sensor["status_rele"]
     })
