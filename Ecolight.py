@@ -456,4 +456,95 @@ def index():
                         document.getElementById('valor-potencia').innerHTML = data.potencia_w + ' W';
                         
                         document.getElementById('valor-energia-kwh').innerText = "Total: " + energiaReal + " kWh";
-                        document.getElementById('valor-economia-rs').innerText = "
+                        document.getElementById('valor-economia-rs').innerText = "R$ " + econReal.replace('.', ',');
+                        document.getElementById('valor-co2').innerText = parseFloat(data.co2).toFixed(1).replace('.', ',') + " g";
+                        
+                        document.getElementById('valor-bateria').innerText = data.bateria + "%";
+                        document.getElementById('barra-bateria').style.width = data.bateria + "%";
+                        
+                        // Atualiza logs na tela
+                        const logContainer = document.getElementById('log-container');
+                        logContainer.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+
+                        // Atualiza botões manuais ativos para dar feedback visual
+                        if(data.modo_operacao === "MANUAL") {
+                            atualizarInterfaceModo("MANUAL");
+                            if(data.status_rele === 1) {
+                                document.getElementById('btn-rele-on').className = "py-2.5 bg-green-500/20 text-green-400 border border-green-500 text-xs font-bold rounded-xl transition-all";
+                                document.getElementById('btn-rele-off').className = "py-2.5 bg-gray-800 text-slate-500 border border-gray-700 text-xs font-bold rounded-xl transition-all";
+                            } else {
+                                document.getElementById('btn-rele-off').className = "py-2.5 bg-red-500/20 text-red-400 border border-red-500 text-xs font-bold rounded-xl transition-all";
+                                document.getElementById('btn-rele-on').className = "py-2.5 bg-gray-800 text-slate-500 border border-gray-700 text-xs font-bold rounded-xl transition-all";
+                            }
+                        } else {
+                            atualizarInterfaceModo("AUTO");
+                        }
+                        
+                        // Ícone Dinâmico da Bateria
+                        const batIcon = document.getElementById('bateria-icon');
+                        if(parseFloat(data.bateria) >= 100) batIcon.className = "ph ph-battery-full text-green-400 text-2xl drop-shadow-[0_0_8px_rgba(74,222,128,0.8)]";
+                        else if(parseFloat(data.bateria) > 20) batIcon.className = "ph ph-battery-charging text-amber-400 text-2xl";
+                        else batIcon.className = "ph ph-battery-warning text-red-500 text-2xl animate-pulse";
+                        
+                        // Status do Card do Relé
+                        const cardRele = document.getElementById('card-rele');
+                        const txtRele = document.getElementById('status-rele-texto');
+                        const descRele = document.getElementById('status-rele-desc');
+                        
+                        if(data.status_rele === 1) {
+                            cardRele.className = "glass-panel p-5 rounded-2xl border border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.15)] flex flex-col justify-between transition-all";
+                            txtRele.className = "text-2xl font-bold text-green-400 mt-3 tracking-wide";
+                            txtRele.innerHTML = "ATIVADO";
+                            descRele.className = "text-[11px] text-green-400/80 mt-2 font-medium";
+                            descRele.innerText = data.modo_operacao === "AUTO" ? "Despejando Excedente (Smart Grid)" : "Carga ligada manualmente";
+                        } else {
+                            cardRele.className = "glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between transition-all";
+                            txtRele.className = "text-2xl font-bold text-slate-500 mt-3 tracking-wide";
+                            txtRele.innerHTML = "DESLIGADO";
+                            descRele.className = "text-[11px] text-slate-500 mt-2 font-medium";
+                            descRele.innerText = data.modo_operacao === "AUTO" ? "Acumulando na Bateria" : "Carga desligada manualmente";
+                        }
+
+                        document.getElementById('table-real-energia').innerText = energiaReal + " kWh";
+                        document.getElementById('table-real-economia').innerText = "R$ " + econReal.replace('.', ',');
+                        document.getElementById('table-proj-energia').innerText = energiaProj.replace('.', ',') + " kWh";
+                        document.getElementById('table-proj-economia').innerText = "R$ " + econProj.replace('.', ',');
+                        
+                        // Gráfico de Telemetria
+                        Chart.defaults.color = '#64748b';
+                        Chart.defaults.font.family = 'Inter';
+                        const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        
+                        if(!chart) {
+                            const ctx = document.getElementById('grafico').getContext('2d');
+                            let gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                            gradient.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
+                            gradient.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+                            
+                            chart = new Chart(ctx, { 
+                                type: 'line', 
+                                data: { labels: [agora], datasets: [{ label: 'Potência (W)', data: [data.potencia_w], borderColor: '#06b6d4', backgroundColor: gradient, borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 10 }] },
+                                options: { 
+                                    responsive: true, maintainAspectRatio: false,
+                                    plugins: { legend: { display: false } },
+                                    scales: { y: { border: {dash: [4, 4]}, grid: {color: '#1e293b'} }, x: { grid: {display: false} } }
+                                }
+                            });
+                        } else {
+                            chart.data.labels.push(agora);
+                            chart.data.datasets[0].data.push(data.potencia_w);
+                            if (chart.data.labels.length > 15) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
+                            chart.update();
+                        }
+                    }
+                } catch (error) {}
+            }
+            setInterval(atualizar, 2000);
+        </script>
+    </body>
+    </html>
+    """)
+
+if __name__ == "__main__":
+    porta = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=porta)
