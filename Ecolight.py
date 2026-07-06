@@ -37,9 +37,9 @@ def recalcular_energia(valor_luz):
         dados_sensor["energia_gerada_kwh"] += potencia_atual_kw * horas_passadas
         
         # --- LÓGICA DA BATERIA VIRTUAL E AUTOMAÇÃO ---
-        # Se o relé de descarte estiver DESLIGADO, a energia gerada vai para a bateria
+        # Multiplicador ajustado para 100 (aprox. 5 a 6 minutos para carga completa sob luz forte)
         if dados_sensor["status_rele"] == 0:
-            dados_sensor["bateria_porcentagem"] += (potencia_atual_kw * horas_passadas * 500) / CAPACIDADE_BATERIA_KWH
+            dados_sensor["bateria_porcentagem"] += (potencia_atual_kw * horas_passadas * 100) / CAPACIDADE_BATERIA_KWH
             if dados_sensor["bateria_porcentagem"] >= 100.0:
                 dados_sensor["bateria_porcentagem"] = 100.0
                 dados_sensor["status_rele"] = 1 # Bateria cheia! Ativa o descarte
@@ -47,7 +47,7 @@ def recalcular_energia(valor_luz):
             # Se o relé está LIGADO, o aparelho consome energia e descarrega um pouco a bateria
             consumo_aparelho_kw = 0.250 # Aparelho simulado consome 250W
             saldo_energia = potencia_atual_kw - consumo_aparelho_kw
-            dados_sensor["bateria_porcentagem"] += (saldo_energia * horas_passadas * 500) / CAPACIDADE_BATERIA_KWH
+            dados_sensor["bateria_porcentagem"] += (saldo_energia * horas_passadas * 100) / CAPACIDADE_BATERIA_KWH
             
             # Limite de segurança para desligar o relé
             if dados_sensor["bateria_porcentagem"] <= 75.0:
@@ -73,7 +73,6 @@ def update():
     recalcular_energia(valor_final)
     dados_sensor["luz"] = valor_final
     
-    # IMPORTANTE: O ESP8266 vai ler essa resposta para saber se liga ou desliga o pino do Relé!
     return f"RELE:{dados_sensor['status_rele']}"
 
 @app.route("/api/get-luz")
