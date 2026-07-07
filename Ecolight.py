@@ -18,7 +18,7 @@ dados_sensor = {
     "status_rele": 0,            
     "modo_operacao": "AUTO",     
     "rele_manual_cmd": 0,        
-    "consumo_casa_w": 0.0,       # NOVO: Consumo atual da casa
+    "consumo_casa_w": 0.0,       
     "historico_dados": [],       
     "logs": []                   
 }
@@ -35,7 +35,7 @@ def adicionar_log(mensagem):
     if len(dados_sensor["logs"]) > 30:
         dados_sensor["logs"].pop()
 
-adicionar_log("⚙️ Sistema Smart Grid Inicializado com Sucesso.")
+adicionar_log("⚙️ EcoLight Solutions: Sistema Microgrid Inicializado.")
 
 def recalcular_energia(valor_luz):
     agora = time.time()
@@ -49,12 +49,11 @@ def recalcular_energia(valor_luz):
         potencia_atual_w = (valor_luz / 1023.0) * POTENCIA_MAX_W
         potencia_atual_kw = potencia_atual_w / 1000.0
         
-        # --- CONSUMO DA CASA (Simulação realista com leve ruído) ---
+        # --- CONSUMO DA CASA ---
         consumo_casa_w = 120.0 + random.uniform(-5.0, 5.0)
         dados_sensor["consumo_casa_w"] = consumo_casa_w
         consumo_casa_kw = consumo_casa_w / 1000.0
         
-        # Acumula apenas a energia que os painéis produziram
         dados_sensor["energia_gerada_kwh"] += potencia_atual_kw * horas_passadas
         
         # Salva dados no histórico
@@ -68,31 +67,25 @@ def recalcular_energia(valor_luz):
         if len(dados_sensor["historico_dados"]) > 500:
             dados_sensor["historico_dados"].pop(0)
         
-        # --- LÓGICA DO INVERSOR HÍBRIDO E BATERIA ---
+        # --- LÓGICA SMART GRID ---
         consumo_total_kw = consumo_casa_kw
         
         if dados_sensor["modo_operacao"] == "AUTO":
-            # Se a bateria estiver cheia, liga o descarte (ex: bomba de água, aquecedor)
             if dados_sensor["status_rele"] == 0 and dados_sensor["bateria_porcentagem"] >= 100.0:
                 dados_sensor["status_rele"] = 1
-                adicionar_log("🔋 Bateria 100%. AUTO ligou a Carga Excedente.")
+                adicionar_log("🔋 Bateria 100%. Algoritmo AUTO ligou a Carga Excedente.")
             elif dados_sensor["status_rele"] == 1 and dados_sensor["bateria_porcentagem"] <= 75.0:
                 dados_sensor["status_rele"] = 0
-                adicionar_log("📉 Bateria caiu para 75%. AUTO desligou a Carga Excedente.")
+                adicionar_log("📉 Bateria caiu para 75%. Algoritmo AUTO desligou a Carga Excedente.")
         else:
             dados_sensor["status_rele"] = dados_sensor["rele_manual_cmd"]
 
-        # Se o relé está ligado, soma o consumo dele ao consumo total da casa
         if dados_sensor["status_rele"] == 1:
-            consumo_total_kw += 0.250 # O relé consome mais 250W
+            consumo_total_kw += 0.250 
 
-        # SALDO DE ENERGIA: Positivo carrega bateria, negativo descarrega!
         saldo_kw = potencia_atual_kw - consumo_total_kw
-        
-        # Multiplicador 100 para a bateria carregar/descarregar visivelmente na apresentação
         dados_sensor["bateria_porcentagem"] += (saldo_kw * horas_passadas * 100) / CAPACIDADE_BATERIA_KWH
 
-        # Travas da bateria
         if dados_sensor["bateria_porcentagem"] > 100.0:
             dados_sensor["bateria_porcentagem"] = 100.0
         elif dados_sensor["bateria_porcentagem"] < 0.0:
@@ -107,7 +100,7 @@ def update():
     valor_final = int(luz_limpa) if luz_limpa else 0
     
     if dados_sensor["luz"] == 0 and valor_final > 0:
-        adicionar_log("📡 Conexão restabelecida com a Usina Solar.")
+        adicionar_log("📡 Telemetria estabelecida com a Usina EcoLight.")
         
     recalcular_energia(valor_final)
     dados_sensor["luz"] = valor_final
@@ -168,18 +161,19 @@ def set_rele_manual():
     if dados_sensor["modo_operacao"] == "MANUAL":
         dados_sensor["rele_manual_cmd"] = cmd
         dados_sensor["status_rele"] = cmd
-        adicionar_log(f"🖱️ Comando: {'LIGAR' if cmd == 1 else 'DESLIGAR'} Carga Excedente.")
+        adicionar_log(f"🖱️ Comando Manual: {'LIGAR' if cmd == 1 else 'DESLIGAR'} Carga Excedente.")
     return jsonify({"status": "ok"})
 
 @app.route("/api/exportar-csv")
 def exportar_csv():
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Timestamp", "Geração (W)", "Consumo Casa (W)", "Bateria (%)", "Relé"])
+    writer.writerow(["EcoLight Solutions - Relatório de Telemetria Microgrid"])
+    writer.writerow(["Timestamp", "Geração (W)", "Consumo Casa (W)", "Bateria (%)", "Relé Excedente"])
     for dado in dados_sensor["historico_dados"]:
         writer.writerow([dado["timestamp"], dado["geracao_w"], dado["consumo_w"], dado["bateria"], dado["status_rele"]])
     output.seek(0)
-    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-disposition": "attachment; filename=relatorio_microgrid.csv"})
+    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-disposition": "attachment; filename=relatorio_ecolight_solutions.csv"})
 
 @app.route("/api/reset")
 def reset_dados():
@@ -190,7 +184,7 @@ def reset_dados():
     dados_sensor["modo_operacao"] = "AUTO"
     dados_sensor["rele_manual_cmd"] = 0
     dados_sensor["logs"] = []
-    adicionar_log("🧹 Sistema resetado para nova demonstração.")
+    adicionar_log("🧹 Sistema resetado para nova demonstração institucional.")
     return jsonify({"status": "reset_ok"})
 
 @app.route("/")
@@ -201,7 +195,7 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>EcoLight Smart Grid</title>
+        <title>EcoLight Solutions | EMS Dashboard</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -219,12 +213,12 @@ def index():
             
             <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 border-b border-gray-800/60 pb-5 gap-4">
                 <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)]">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.3)]">
                         <i class="ph ph-solar-panel text-2xl text-white"></i>
                     </div>
                     <div>
-                        <h1 class="text-2xl font-bold text-white tracking-tight">EcoLight Smart Grid</h1>
-                        <p class="text-xs text-blue-400 font-medium tracking-wide uppercase">Inversor Híbrido & Telemetria</p>
+                        <h1 class="text-2xl font-bold text-white tracking-tight">EcoLight Solutions</h1>
+                        <p class="text-xs text-cyan-400 font-medium tracking-wide uppercase">Energy Management System (EMS)</p>
                     </div>
                 </div>
                 
@@ -355,7 +349,7 @@ def index():
             }
 
             async function resetarSistema() {
-                if(confirm("Zerar dados?")) {
+                if(confirm("Zerar dados da maquete?")) {
                     await fetch('/api/reset');
                     window.location.reload();
                 }
@@ -371,7 +365,6 @@ def index():
                         document.getElementById('valor-potencia').innerHTML = data.potencia_w + ' W';
                         document.getElementById('valor-consumo').innerHTML = data.consumo_casa_w + ' W';
                         
-                        // Balanço da casa
                         const geracao = parseFloat(data.potencia_w);
                         const consumo = parseFloat(data.consumo_casa_w);
                         const balancoTxt = document.getElementById('status-balanco');
