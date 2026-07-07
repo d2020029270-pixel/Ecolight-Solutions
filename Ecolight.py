@@ -215,7 +215,7 @@ def index():
             <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 border-b border-gray-800/60 pb-5 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.2)] bg-gray-900 border border-gray-800">
-                        <img src="https://i.ibb.co/nNvz78tQ/yes.png" alt="EcoLight Solutions Logo" class="w-full h-full object-cover">
+                        <img src="https://i.ibb.co/nNvz78tQ/yes.png" alt="EcoLight Solutions Logo" class="w-full h-full object-cover" onerror="this.style.display='none'">
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white tracking-tight">EcoLight Solutions</h1>
@@ -239,7 +239,11 @@ def index():
                     <div class="absolute -right-4 -top-4 w-16 h-16 bg-cyan-500/5 rounded-full blur-xl"></div>
                     <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-sun-horizon text-cyan-400 text-lg"></i> Geração Solar (Input)</p>
                     <h2 class="text-4xl font-black text-white mt-3" id="valor-potencia">0.0 W</h2>
-                    <p class="text-[11px] font-medium text-slate-500 mt-2">Leitura Óptica Bruta: <span id="valor-luz" class="text-cyan-500">0</span></p>
+                    
+                    <div class="flex items-center gap-4 mt-2">
+                        <p class="text-[11px] font-medium text-slate-500">Sinal: <span id="valor-luz" class="text-cyan-500">0</span></p>
+                        <p class="text-[11px] font-medium text-slate-500">Tensão: <span id="valor-tensao" class="text-cyan-500">0.00 V</span></p>
+                    </div>
                 </div>
 
                 <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-rose-500/30 transition-all relative overflow-hidden">
@@ -362,7 +366,10 @@ def index():
                     const data = await res.json();
                     
                     if (data.status === "Online") {
+                        // Atualiza as leituras brutas
                         document.getElementById('valor-luz').innerText = data.luz;
+                        document.getElementById('valor-tensao').innerText = data.tensao + " V";
+                        
                         document.getElementById('valor-potencia').innerHTML = data.potencia_w + ' W';
                         document.getElementById('valor-consumo').innerHTML = data.consumo_casa_w + ' W';
                         
