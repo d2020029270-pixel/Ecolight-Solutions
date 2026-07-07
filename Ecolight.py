@@ -215,7 +215,7 @@ def index():
             <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 border-b border-gray-800/60 pb-5 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.2)] bg-gray-900 border border-gray-800">
-                        <img src="https://i.ibb.co/nNvz78tQ/yes.png" alt="EcoLight Solutions Logo" class="w-full h-full object-cover" onerror="this.style.display='none'">
+                        <img src="https://raw.githubusercontent.com/d2020029270-pixel/Ecolight-Solutions/main/yes.png" alt="EcoLight Solutions Logo" class="w-full h-full object-cover">
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white tracking-tight">EcoLight Solutions</h1>
