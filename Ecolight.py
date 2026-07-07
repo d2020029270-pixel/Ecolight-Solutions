@@ -213,8 +213,8 @@ def index():
             
             <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 border-b border-gray-800/60 pb-5 gap-4">
                 <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-                        <i class="ph ph-solar-panel text-2xl text-white"></i>
+                    <div class="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.2)] bg-gray-900 border border-gray-800">
+                        <img src="https://googleusercontent.com/profile/picture/0" alt="EcoLight Solutions Logo" class="w-full h-full object-cover">
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white tracking-tight">EcoLight Solutions</h1>
