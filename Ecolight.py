@@ -112,7 +112,8 @@ def get_luz():
     agora = time.time()
     luz = dados_sensor["luz"]
     recalcular_energia(luz)
-    status = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 7 else "Online"
+    # Ajuste de tolerância de Offline para acompanhar a atualização de 15 segundos
+    status = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 25 else "Online"
         
     tensao_calculada = (luz / 1023.0) * 3.3
     potencia_w = (luz / 1023.0) * POTENCIA_MAX_W
@@ -214,7 +215,7 @@ def index():
             <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 border-b border-gray-800/60 pb-5 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.2)] bg-gray-900 border border-gray-800">
-                        <img src="https://googleusercontent.com/profile/picture/0" alt="EcoLight Solutions Logo" class="w-full h-full object-cover">
+                        <img src="https://i.ibb.co/nNvz78tQ/yes.png" alt="EcoLight Solutions Logo" class="w-full h-full object-cover">
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white tracking-tight">EcoLight Solutions</h1>
@@ -452,8 +453,8 @@ def index():
                             chart.data.datasets[0].data.push(geracao);
                             chart.data.datasets[1].data.push(consumo);
                             
-                            // AQUI É ONDE FIZ A ALTERAÇÃO: DE 20 PARA 150
-                            if (chart.data.labels.length > 150) { 
+                            // LIMITADO A 40 PONTOS (40 * 15 segundos = 10 minutos de histórico contínuo na tela)
+                            if (chart.data.labels.length > 40) { 
                                 chart.data.labels.shift(); 
                                 chart.data.datasets[0].data.shift(); 
                                 chart.data.datasets[1].data.shift(); 
@@ -463,7 +464,8 @@ def index():
                     }
                 } catch (error) {}
             }
-            setInterval(atualizar, 2000);
+            // ATUALIZAÇÃO DEFINIDA PARA 15 SEGUNDOS (15000ms)
+            setInterval(atualizar, 15000);
         </script>
     </body>
     </html>
