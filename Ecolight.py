@@ -451,7 +451,9 @@ def index():
                             chart.data.labels.push(agora);
                             chart.data.datasets[0].data.push(geracao);
                             chart.data.datasets[1].data.push(consumo);
-                            if (chart.data.labels.length > 20) { 
+                            
+                            // AQUI É ONDE FIZ A ALTERAÇÃO: DE 20 PARA 150
+                            if (chart.data.labels.length > 150) { 
                                 chart.data.labels.shift(); 
                                 chart.data.datasets[0].data.shift(); 
                                 chart.data.datasets[1].data.shift(); 
