@@ -112,8 +112,9 @@ def get_luz():
     agora = time.time()
     luz = dados_sensor["luz"]
     recalcular_energia(luz)
-    # Ajuste de tolerância de Offline para acompanhar a atualização de 15 segundos
-    status = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 25 else "Online"
+    
+    # Ajuste de tolerância de Offline para acompanhar a atualização de 5 segundos
+    status = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 15 else "Online"
         
     tensao_calculada = (luz / 1023.0) * 3.3
     potencia_w = (luz / 1023.0) * POTENCIA_MAX_W
@@ -460,8 +461,8 @@ def index():
                             chart.data.datasets[0].data.push(geracao);
                             chart.data.datasets[1].data.push(consumo);
                             
-                            // LIMITADO A 40 PONTOS (40 * 15 segundos = 10 minutos de histórico contínuo na tela)
-                            if (chart.data.labels.length > 40) { 
+                            // LIMITADO A 120 PONTOS (120 * 5 segundos = 10 minutos de histórico contínuo na tela)
+                            if (chart.data.labels.length > 120) { 
                                 chart.data.labels.shift(); 
                                 chart.data.datasets[0].data.shift(); 
                                 chart.data.datasets[1].data.shift(); 
@@ -471,8 +472,8 @@ def index():
                     }
                 } catch (error) {}
             }
-            // ATUALIZAÇÃO DEFINIDA PARA 15 SEGUNDOS (15000ms)
-            setInterval(atualizar, 15000);
+            // ATUALIZAÇÃO DEFINIDA PARA 5 SEGUNDOS (5000ms)
+            setInterval(atualizar, 5000);
         </script>
     </body>
     </html>
