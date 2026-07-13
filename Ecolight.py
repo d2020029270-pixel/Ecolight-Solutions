@@ -10,7 +10,9 @@ app = Flask(__name__)
 # Banco de dados virtual em memória
 dados_sensor = {
     "luz": 0,
+    "vento": 0,                  # NOVO: Dado do sensor eólico
     "ultima_atualizacao": 0,
+    "ultima_atualizacao_eolica": 0, # NOVO: Controle de status da placa eólica
     "energia_gerada_kwh": 0.0,
     "tempo_eco_acumulado": 0.0,
     "tempo_total_rodando": 0.0,
@@ -25,7 +27,8 @@ dados_sensor = {
 
 # Constantes de Engenharia
 TARIFA_KWH = 0.95
-POTENCIA_MAX_W = 500.0 
+POTENCIA_MAX_W = 500.0           # Usina Solar
+POTENCIA_MAX_EOLICA_W = 300.0    # NOVO: Usina Eólica (Turbina)
 EMISSAO_CO2_POR_KWH_GRAMAS = 85.0
 CAPACIDADE_BATERIA_KWH = 0.05 
 
@@ -35,7 +38,7 @@ def adicionar_log(mensagem):
     if len(dados_sensor["logs"]) > 30:
         dados_sensor["logs"].pop()
 
-adicionar_log("⚙️ EcoLight Solutions: Sistema Microgrid Inicializado.")
+adicionar_log("⚙️ EcoLight Solutions: Sistema Microgrid Híbrido Inicializado.")
 
 def recalcular_energia(valor_luz):
     agora = time.time()
@@ -45,21 +48,29 @@ def recalcular_energia(valor_luz):
         
         dados_sensor["tempo_total_rodando"] += horas_passadas
         
-        # --- GERAÇÃO SOLAR ---
-        potencia_atual_w = (valor_luz / 1023.0) * POTENCIA_MAX_W
-        potencia_atual_kw = potencia_atual_w / 1000.0
+        # --- GERAÇÃO SOLAR (Mantida 100% igual) ---
+        potencia_solar_w = (valor_luz / 1023.0) * POTENCIA_MAX_W
+        potencia_solar_kw = potencia_solar_w / 1000.0
+        
+        # --- GERAÇÃO EÓLICA (Nova) ---
+        potencia_eolica_w = (dados_sensor["vento"] / 1023.0) * POTENCIA_MAX_EOLICA_W
+        potencia_eolica_kw = potencia_eolica_w / 1000.0
+        
+        # Geração Total = Solar + Eólica
+        potencia_total_gerada_kw = potencia_solar_kw + potencia_eolica_kw
         
         # --- CONSUMO DA CASA ---
         consumo_casa_w = 120.0 + random.uniform(-5.0, 5.0)
         dados_sensor["consumo_casa_w"] = consumo_casa_w
         consumo_casa_kw = consumo_casa_w / 1000.0
         
-        dados_sensor["energia_gerada_kwh"] += potencia_atual_kw * horas_passadas
+        dados_sensor["energia_gerada_kwh"] += potencia_total_gerada_kw * horas_passadas
         
         # Salva dados no histórico
         dados_sensor["historico_dados"].append({
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            "geracao_w": round(potencia_atual_w, 1),
+            "geracao_solar_w": round(potencia_solar_w, 1),
+            "geracao_eolica_w": round(potencia_eolica_w, 1),
             "consumo_w": round(consumo_casa_w, 1),
             "bateria": round(dados_sensor["bateria_porcentagem"], 1),
             "status_rele": "LIGADO" if dados_sensor["status_rele"] == 1 else "DESLIGADO"
@@ -67,7 +78,7 @@ def recalcular_energia(valor_luz):
         if len(dados_sensor["historico_dados"]) > 500:
             dados_sensor["historico_dados"].pop(0)
         
-        # --- LÓGICA SMART GRID ---
+        # --- LÓGICA SMART GRID (Mantida intacta) ---
         consumo_total_kw = consumo_casa_kw
         
         if dados_sensor["modo_operacao"] == "AUTO":
@@ -83,7 +94,8 @@ def recalcular_energia(valor_luz):
         if dados_sensor["status_rele"] == 1:
             consumo_total_kw += 0.250 
 
-        saldo_kw = potencia_atual_kw - consumo_total_kw
+        # Balanço da bateria considera as DUAS usinas agora
+        saldo_kw = potencia_total_gerada_kw - consumo_total_kw
         dados_sensor["bateria_porcentagem"] += (saldo_kw * horas_passadas * 100) / CAPACIDADE_BATERIA_KWH
 
         if dados_sensor["bateria_porcentagem"] > 100.0:
@@ -93,6 +105,7 @@ def recalcular_energia(valor_luz):
             
     dados_sensor["ultima_atualizacao"] = agora
 
+# Rota original da Usina Solar e Relé (Intacta)
 @app.route("/update")
 def update():
     luz_bruta = request.args.get("luz", "0")
@@ -100,24 +113,43 @@ def update():
     valor_final = int(luz_limpa) if luz_limpa else 0
     
     if dados_sensor["luz"] == 0 and valor_final > 0:
-        adicionar_log("📡 Telemetria estabelecida com a Usina EcoLight.")
+        adicionar_log("📡 Telemetria estabelecida com a Usina Solar.")
         
     recalcular_energia(valor_final)
     dados_sensor["luz"] = valor_final
     
     return f"RELE:{dados_sensor['status_rele']}"
 
+# NOVO: Rota exclusiva para a Placa 2 (Usina Eólica)
+@app.route("/update-eolica")
+def update_eolica():
+    vento_bruto = request.args.get("vento", "0")
+    vento_limpo = ''.join(filter(str.isdigit, str(vento_bruto)))
+    valor_final = int(vento_limpo) if vento_limpo else 0
+    
+    if dados_sensor["vento"] == 0 and valor_final > 0:
+        adicionar_log("🌪️ Telemetria estabelecida com a Turbina Eólica.")
+        
+    dados_sensor["vento"] = valor_final
+    dados_sensor["ultima_atualizacao_eolica"] = time.time()
+    
+    return "OK"
+
 @app.route("/api/get-luz")
 def get_luz():
     agora = time.time()
     luz = dados_sensor["luz"]
+    vento = dados_sensor["vento"]
+    
     recalcular_energia(luz)
     
-    # Ajuste de tolerância de Offline para acompanhar a atualização de 5 segundos
-    status = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 15 else "Online"
+    status_solar = "Offline" if agora - dados_sensor["ultima_atualizacao"] > 15 else "Online"
+    status_eolica = "Offline" if agora - dados_sensor["ultima_atualizacao_eolica"] > 15 else "Online"
         
     tensao_calculada = (luz / 1023.0) * 3.3
-    potencia_w = (luz / 1023.0) * POTENCIA_MAX_W
+    potencia_solar_w = (luz / 1023.0) * POTENCIA_MAX_W
+    potencia_eolica_w = (vento / 1023.0) * POTENCIA_MAX_EOLICA_W
+    
     energia_acumulada = dados_sensor["energia_gerada_kwh"]
     economia_rs = energia_acumulada * TARIFA_KWH
     co2_poupado = energia_acumulada * EMISSAO_CO2_POR_KWH_GRAMAS
@@ -126,21 +158,22 @@ def get_luz():
     if tempo_decorrido > 0.0001:
         proj_energia_mes = energia_acumulada * (720.0 / tempo_decorrido)
     else:
-        proj_energia_mes = (potencia_w / 1000.0) * 5.0 * 30.0
+        proj_energia_mes = ((potencia_solar_w + potencia_eolica_w) / 1000.0) * 5.0 * 30.0
         
     proj_economia_mes = proj_energia_mes * TARIFA_KWH
         
     return jsonify({
         "luz": luz,
-        "status": status,
+        "vento": vento,
+        "status": status_solar,
+        "status_eolica": status_eolica,
         "tensao": f"{tensao_calculada:.2f}",
-        "potencia_w": f"{potencia_w:.1f}",
+        "potencia_w": f"{potencia_solar_w:.1f}",
+        "potencia_eolica_w": f"{potencia_eolica_w:.1f}",
         "consumo_casa_w": f"{dados_sensor['consumo_casa_w']:.1f}",
         "energia_kwh": f'{energia_acumulada:.6f}', 
         "economia_rs": f'{economia_rs:.4f}',
         "co2": f"{co2_poupado:.2f}",
-        "proj_energia": f"{proj_energia_mes:.2f}",
-        "proj_economia": f"{proj_economia_mes:.2f}",
         "bateria": f"{dados_sensor['bateria_porcentagem']:.1f}",
         "status_rele": dados_sensor["status_rele"],
         "modo_operacao": dados_sensor["modo_operacao"],
@@ -170,10 +203,10 @@ def set_rele_manual():
 def exportar_csv():
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["EcoLight Solutions - Relatório de Telemetria Microgrid"])
-    writer.writerow(["Timestamp", "Geração (W)", "Consumo Casa (W)", "Bateria (%)", "Relé Excedente"])
+    writer.writerow(["EcoLight Solutions - Relatório de Telemetria Híbrida"])
+    writer.writerow(["Timestamp", "Geracao Solar (W)", "Geracao Eolica (W)", "Consumo Casa (W)", "Bateria (%)", "Rele"])
     for dado in dados_sensor["historico_dados"]:
-        writer.writerow([dado["timestamp"], dado["geracao_w"], dado["consumo_w"], dado["bateria"], dado["status_rele"]])
+        writer.writerow([dado["timestamp"], dado["geracao_solar_w"], dado["geracao_eolica_w"], dado["consumo_w"], dado["bateria"], dado["status_rele"]])
     output.seek(0)
     return Response(output.getvalue(), mimetype="text/csv", headers={"Content-disposition": "attachment; filename=relatorio_ecolight_solutions.csv"})
 
@@ -197,7 +230,7 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>EcoLight Solutions | EMS Dashboard</title>
+        <title>EcoLight Solutions | EMS Híbrido</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -213,6 +246,7 @@ def index():
     <body class="bg-[#0f1115] min-h-screen flex flex-col text-slate-200">
         <div class="max-w-7xl mx-auto p-6 flex-grow w-full">
             
+            <!-- HEADER (Intacto) -->
             <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 border-b border-gray-800/60 pb-5 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.2)] bg-gray-900 border border-gray-800">
@@ -220,7 +254,7 @@ def index():
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white tracking-tight">EcoLight Solutions</h1>
-                        <p class="text-xs text-cyan-400 font-medium tracking-wide uppercase">Energy Management System (EMS)</p>
+                        <p class="text-xs text-cyan-400 font-medium tracking-wide uppercase">Energy Management System (Híbrido)</p>
                     </div>
                 </div>
                 
@@ -234,40 +268,57 @@ def index():
                 </div>
             </div>
 
-            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+            <!-- CARDS DE METRIFICAÇÃO -->
+            <div id="painel" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
                 
+                <!-- GERAÇÃO SOLAR (Intacta) -->
                 <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-cyan-500/30 transition-all relative overflow-hidden">
                     <div class="absolute -right-4 -top-4 w-16 h-16 bg-cyan-500/5 rounded-full blur-xl"></div>
-                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-sun-horizon text-cyan-400 text-lg"></i> Geração Solar (Input)</p>
-                    <h2 class="text-4xl font-black text-white mt-3" id="valor-potencia">0.0 W</h2>
+                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-sun-horizon text-cyan-400 text-lg"></i> Geração Solar</p>
+                    <h2 class="text-3xl font-black text-white mt-3" id="valor-potencia">0.0 W</h2>
                     
                     <div class="flex items-center gap-4 mt-2">
-                        <p class="text-[11px] font-medium text-slate-500">Sinal: <span id="valor-luz" class="text-cyan-500">0</span></p>
-                        <p class="text-[11px] font-medium text-slate-500">Tensão: <span id="valor-tensao" class="text-cyan-500">0.00 V</span></p>
+                        <p class="text-[10px] font-medium text-slate-500">Sinal: <span id="valor-luz" class="text-cyan-500">0</span></p>
+                        <p class="text-[10px] font-medium text-slate-500">Status: <span id="status-solar" class="text-cyan-500">Offline</span></p>
                     </div>
                 </div>
 
-                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-rose-500/30 transition-all relative overflow-hidden">
-                    <div class="absolute -right-4 -top-4 w-16 h-16 bg-rose-500/5 rounded-full blur-xl"></div>
-                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-house-line text-rose-400 text-lg"></i> Consumo da Residência (Load)</p>
-                    <h2 class="text-4xl font-black text-rose-400 mt-3" id="valor-consumo">0.0 W</h2>
-                    <p class="text-[11px] font-medium text-slate-500 mt-2" id="status-balanco">Calculando balanço energético...</p>
+                <!-- NOVO CARD: GERAÇÃO EÓLICA -->
+                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-emerald-500/30 transition-all relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl"></div>
+                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-wind text-emerald-400 text-lg"></i> Geração Eólica</p>
+                    <h2 class="text-3xl font-black text-white mt-3" id="valor-potencia-eolica">0.0 W</h2>
+                    
+                    <div class="flex items-center gap-4 mt-2">
+                        <p class="text-[10px] font-medium text-slate-500">Sinal: <span id="valor-vento" class="text-emerald-500">0</span></p>
+                        <p class="text-[10px] font-medium text-slate-500">Status: <span id="status-eolica" class="text-emerald-500">Offline</span></p>
+                    </div>
                 </div>
 
+                <!-- CONSUMO DA CASA (Intacto) -->
+                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-rose-500/30 transition-all relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 w-16 h-16 bg-rose-500/5 rounded-full blur-xl"></div>
+                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-house-line text-rose-400 text-lg"></i> Consumo da Residência</p>
+                    <h2 class="text-3xl font-black text-rose-400 mt-3" id="valor-consumo">0.0 W</h2>
+                    <p class="text-[10px] font-medium text-slate-500 mt-2" id="status-balanco">Calculando balanço...</p>
+                </div>
+
+                <!-- BATERIA (Intacta) -->
                 <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-amber-500/40 transition-all relative overflow-hidden">
                     <div class="absolute -right-4 -top-4 w-16 h-16 bg-amber-500/5 rounded-full blur-xl"></div>
                     <div class="flex justify-between items-center">
-                        <p class="text-slate-400 font-medium text-xs">Banco de Baterias (Storage)</p>
+                        <p class="text-slate-400 font-medium text-xs">Banco de Baterias</p>
                         <i id="bateria-icon" class="ph ph-battery-charging text-amber-500 text-xl"></i>
                     </div>
-                    <h2 class="text-4xl font-black text-amber-400 mt-2 tracking-tight" id="valor-bateria">0.0%</h2>
+                    <h2 class="text-3xl font-black text-amber-400 mt-2 tracking-tight" id="valor-bateria">0.0%</h2>
                     <div class="w-full bg-gray-800/80 h-1.5 rounded-full mt-3 overflow-hidden border border-gray-700/50">
                         <div id="barra-bateria" class="bg-gradient-to-r from-amber-600 to-amber-400 h-full transition-all duration-500 shadow-[0_0_10px_rgba(251,191,36,0.5)]" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-indigo-500/30 transition-all">
-                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-currency-circle-dollar text-indigo-400 text-lg"></i> Economia e Meio Ambiente</p>
+                <!-- ECONOMIA -->
+                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between hover:border-indigo-500/30 transition-all md:col-span-2 lg:col-span-2">
+                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-currency-circle-dollar text-indigo-400 text-lg"></i> Economia e Meio Ambiente (Híbrido)</p>
                     <h2 class="text-3xl font-bold text-indigo-400 mt-3" id="valor-economia-rs">R$ 0,00</h2>
                     <div class="flex gap-2 mt-2">
                         <p class="text-[11px] text-green-400/80 font-medium bg-green-900/10 px-2 py-1 rounded border border-green-800/30 flex items-center gap-1 w-max"><i class="ph ph-leaf"></i> CO₂: <span id="valor-co2">0.0 g</span></p>
@@ -275,13 +326,15 @@ def index():
                     </div>
                 </div>
 
-                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between transition-all" id="card-rele">
-                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-plug text-lg"></i> Carga Excedente (Relé)</p>
+                <!-- RELÉ SMART GRID (Intacto) -->
+                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between transition-all lg:col-span-1" id="card-rele">
+                    <p class="text-slate-400 font-medium text-xs flex items-center gap-2"><i class="ph ph-plug text-lg"></i> Carga Excedente</p>
                     <h2 class="text-2xl font-bold text-slate-500 mt-3" id="status-rele-texto">DESLIGADO</h2>
                     <p class="text-[11px] text-slate-500 mt-2 font-medium" id="status-rele-desc">Acumulando na Bateria</p>
                 </div>
 
-                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between">
+                <!-- CONTROLE ATIVO (Intacto) -->
+                <div class="glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between lg:col-span-1">
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="text-xs font-bold text-slate-400 flex items-center gap-2">Modo do Relé</h3>
                         <span id="badge-modo-txt" class="text-[10px] font-bold px-2 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded">AUTO</span>
@@ -299,15 +352,18 @@ def index():
                 </div>
             </div>
 
+            <!-- GRÁFICO E LOGS LADO A LADO -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <!-- GRÁFICO TRIPLO -->
                 <div class="glass-panel p-6 rounded-2xl border border-gray-800/80 lg:col-span-2">
                     <div class="flex items-center gap-3 mb-4">
                         <i class="ph ph-chart-line-up text-cyan-400 text-xl"></i>
-                        <h3 class="text-base font-bold text-white tracking-wide">Geração Solar vs. Consumo (W)</h3>
+                        <h3 class="text-base font-bold text-white tracking-wide">Desempenho da Micro-rede (W)</h3>
                     </div>
                     <div class="w-full h-60"><canvas id="grafico"></canvas></div>
                 </div>
 
+                <!-- LOGS -->
                 <div class="glass-panel p-6 rounded-2xl border border-gray-800/80">
                     <div class="flex items-center justify-between mb-3 pb-2 border-b border-gray-800/50">
                         <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="ph ph-terminal text-emerald-400"></i> Histórico de Eventos</h3>
@@ -366,113 +422,126 @@ def index():
                     const res = await fetch('/api/get-luz');
                     const data = await res.json();
                     
-                    if (data.status === "Online") {
-                        // Atualiza as leituras brutas
-                        document.getElementById('valor-luz').innerText = data.luz;
-                        document.getElementById('valor-tensao').innerText = data.tensao + " V";
-                        
-                        document.getElementById('valor-potencia').innerHTML = data.potencia_w + ' W';
-                        document.getElementById('valor-consumo').innerHTML = data.consumo_casa_w + ' W';
-                        
-                        const geracao = parseFloat(data.potencia_w);
-                        const consumo = parseFloat(data.consumo_casa_w);
-                        const balancoTxt = document.getElementById('status-balanco');
-                        
-                        if(geracao > consumo) {
-                            balancoTxt.innerHTML = `<span class="text-green-400">Restam +${(geracao-consumo).toFixed(1)}W (Carregando Bateria)</span>`;
-                        } else {
-                            balancoTxt.innerHTML = `<span class="text-amber-400">Faltam ${(consumo-geracao).toFixed(1)}W (Usando Bateria)</span>`;
-                        }
+                    // Atualiza Status das Placas
+                    document.getElementById('status-solar').innerText = data.status;
+                    document.getElementById('status-solar').className = data.status === "Online" ? "text-cyan-500" : "text-slate-500";
+                    
+                    document.getElementById('status-eolica').innerText = data.status_eolica;
+                    document.getElementById('status-eolica').className = data.status_eolica === "Online" ? "text-emerald-500" : "text-slate-500";
 
-                        document.getElementById('valor-energia-kwh').innerText = parseFloat(data.energia_kwh).toFixed(3) + " kWh";
-                        document.getElementById('valor-economia-rs').innerText = "R$ " + parseFloat(data.economia_rs.replace(',','.')).toFixed(2).replace('.', ',');
-                        document.getElementById('valor-co2').innerText = parseFloat(data.co2).toFixed(1).replace('.', ',') + " g";
-                        
-                        document.getElementById('valor-bateria').innerText = data.bateria + "%";
-                        document.getElementById('barra-bateria').style.width = data.bateria + "%";
-                        
-                        const logContainer = document.getElementById('log-container');
-                        logContainer.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+                    // Atualiza as leituras brutas
+                    document.getElementById('valor-luz').innerText = data.luz;
+                    document.getElementById('valor-vento').innerText = data.vento;
+                    
+                    document.getElementById('valor-potencia').innerHTML = data.potencia_w + ' W';
+                    document.getElementById('valor-potencia-eolica').innerHTML = data.potencia_eolica_w + ' W';
+                    document.getElementById('valor-consumo').innerHTML = data.consumo_casa_w + ' W';
+                    
+                    const geracaoSolar = parseFloat(data.potencia_w);
+                    const geracaoEolica = parseFloat(data.potencia_eolica_w);
+                    const geracaoTotal = geracaoSolar + geracaoEolica;
+                    const consumo = parseFloat(data.consumo_casa_w);
+                    const balancoTxt = document.getElementById('status-balanco');
+                    
+                    if(geracaoTotal > consumo) {
+                        balancoTxt.innerHTML = `<span class="text-green-400">Sobra +${(geracaoTotal-consumo).toFixed(1)}W (Carregando)</span>`;
+                    } else {
+                        balancoTxt.innerHTML = `<span class="text-amber-400">Falta ${(consumo-geracaoTotal).toFixed(1)}W (Da Bateria)</span>`;
+                    }
 
-                        if(data.modo_operacao === "MANUAL") {
-                            atualizarInterfaceModo("MANUAL");
-                            if(data.status_rele === 1) {
-                                document.getElementById('btn-rele-on').className = "py-2 bg-green-500/20 text-green-400 border border-green-500 text-[10px] font-bold rounded-lg transition-all";
-                                document.getElementById('btn-rele-off').className = "py-2 bg-gray-800 text-slate-500 border border-gray-700 text-[10px] font-bold rounded-lg transition-all";
-                            } else {
-                                document.getElementById('btn-rele-off').className = "py-2 bg-red-500/20 text-red-400 border border-red-500 text-[10px] font-bold rounded-lg transition-all";
-                                document.getElementById('btn-rele-on').className = "py-2 bg-gray-800 text-slate-500 border border-gray-700 text-[10px] font-bold rounded-lg transition-all";
-                            }
-                        } else {
-                            atualizarInterfaceModo("AUTO");
-                        }
-                        
-                        const batIcon = document.getElementById('bateria-icon');
-                        if(parseFloat(data.bateria) >= 100) batIcon.className = "ph ph-battery-full text-green-400 text-2xl drop-shadow-[0_0_8px_rgba(74,222,128,0.8)]";
-                        else if(parseFloat(data.bateria) > 20) batIcon.className = "ph ph-battery-charging text-amber-400 text-2xl";
-                        else batIcon.className = "ph ph-battery-warning text-red-500 text-2xl animate-pulse";
-                        
-                        const cardRele = document.getElementById('card-rele');
-                        const txtRele = document.getElementById('status-rele-texto');
-                        
+                    document.getElementById('valor-energia-kwh').innerText = parseFloat(data.energia_kwh).toFixed(3) + " kWh";
+                    document.getElementById('valor-economia-rs').innerText = "R$ " + parseFloat(data.economia_rs.replace(',','.')).toFixed(2).replace('.', ',');
+                    document.getElementById('valor-co2').innerText = parseFloat(data.co2).toFixed(1).replace('.', ',') + " g";
+                    
+                    document.getElementById('valor-bateria').innerText = data.bateria + "%";
+                    document.getElementById('barra-bateria').style.width = data.bateria + "%";
+                    
+                    const logContainer = document.getElementById('log-container');
+                    logContainer.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+
+                    if(data.modo_operacao === "MANUAL") {
+                        atualizarInterfaceModo("MANUAL");
                         if(data.status_rele === 1) {
-                            cardRele.className = "glass-panel p-5 rounded-2xl border border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.15)] flex flex-col justify-between transition-all";
-                            txtRele.className = "text-2xl font-bold text-green-400 mt-3";
-                            txtRele.innerHTML = "ATIVADO";
+                            document.getElementById('btn-rele-on').className = "py-2 bg-green-500/20 text-green-400 border border-green-500 text-[10px] font-bold rounded-lg transition-all";
+                            document.getElementById('btn-rele-off').className = "py-2 bg-gray-800 text-slate-500 border border-gray-700 text-[10px] font-bold rounded-lg transition-all";
                         } else {
-                            cardRele.className = "glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between transition-all";
-                            txtRele.className = "text-2xl font-bold text-slate-500 mt-3";
-                            txtRele.innerHTML = "DESLIGADO";
+                            document.getElementById('btn-rele-off').className = "py-2 bg-red-500/20 text-red-400 border border-red-500 text-[10px] font-bold rounded-lg transition-all";
+                            document.getElementById('btn-rele-on').className = "py-2 bg-gray-800 text-slate-500 border border-gray-700 text-[10px] font-bold rounded-lg transition-all";
                         }
+                    } else {
+                        atualizarInterfaceModo("AUTO");
+                    }
+                    
+                    const batIcon = document.getElementById('bateria-icon');
+                    if(parseFloat(data.bateria) >= 100) batIcon.className = "ph ph-battery-full text-green-400 text-2xl drop-shadow-[0_0_8px_rgba(74,222,128,0.8)]";
+                    else if(parseFloat(data.bateria) > 20) batIcon.className = "ph ph-battery-charging text-amber-400 text-2xl";
+                    else batIcon.className = "ph ph-battery-warning text-red-500 text-2xl animate-pulse";
+                    
+                    const cardRele = document.getElementById('card-rele');
+                    const txtRele = document.getElementById('status-rele-texto');
+                    
+                    if(data.status_rele === 1) {
+                        cardRele.className = "glass-panel p-5 rounded-2xl border border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.15)] flex flex-col justify-between transition-all lg:col-span-1";
+                        txtRele.className = "text-2xl font-bold text-green-400 mt-3";
+                        txtRele.innerHTML = "ATIVADO";
+                    } else {
+                        cardRele.className = "glass-panel p-5 rounded-2xl border border-gray-800/80 flex flex-col justify-between transition-all lg:col-span-1";
+                        txtRele.className = "text-2xl font-bold text-slate-500 mt-3";
+                        txtRele.innerHTML = "DESLIGADO";
+                    }
 
-                        // GRÁFICO DUPLO
-                        Chart.defaults.color = '#64748b';
-                        Chart.defaults.font.family = 'Inter';
-                        const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    // GRÁFICO TRIPLO
+                    Chart.defaults.color = '#64748b';
+                    Chart.defaults.font.family = 'Inter';
+                    const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    
+                    if(!chart) {
+                        const ctx = document.getElementById('grafico').getContext('2d');
                         
-                        if(!chart) {
-                            const ctx = document.getElementById('grafico').getContext('2d');
-                            
-                            let gradSolar = ctx.createLinearGradient(0, 0, 0, 400);
-                            gradSolar.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
-                            gradSolar.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+                        let gradSolar = ctx.createLinearGradient(0, 0, 0, 400);
+                        gradSolar.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
+                        gradSolar.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
 
-                            let gradConsumo = ctx.createLinearGradient(0, 0, 0, 400);
-                            gradConsumo.addColorStop(0, 'rgba(244, 63, 94, 0.4)');
-                            gradConsumo.addColorStop(1, 'rgba(244, 63, 94, 0.0)');
-                            
-                            chart = new Chart(ctx, { 
-                                type: 'line', 
-                                data: { 
-                                    labels: [agora], 
-                                    datasets: [
-                                        { label: 'Geração Solar', data: [geracao], borderColor: '#06b6d4', backgroundColor: gradSolar, borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 },
-                                        { label: 'Consumo Casa', data: [consumo], borderColor: '#f43f5e', backgroundColor: gradConsumo, borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 }
-                                    ] 
-                                },
-                                options: { 
-                                    responsive: true, maintainAspectRatio: false,
-                                    plugins: { legend: { display: true, labels: { color: '#cbd5e1' } } },
-                                    scales: { y: { border: {dash: [4, 4]}, grid: {color: '#1e293b'} }, x: { grid: {display: false} } }
-                                }
-                            });
-                        } else {
-                            chart.data.labels.push(agora);
-                            chart.data.datasets[0].data.push(geracao);
-                            chart.data.datasets[1].data.push(consumo);
-                            
-                            // LIMITADO A 120 PONTOS (120 * 5 segundos = 10 minutos de histórico contínuo na tela)
-                            if (chart.data.labels.length > 120) { 
-                                chart.data.labels.shift(); 
-                                chart.data.datasets[0].data.shift(); 
-                                chart.data.datasets[1].data.shift(); 
+                        let gradEolica = ctx.createLinearGradient(0, 0, 0, 400);
+                        gradEolica.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+                        gradEolica.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+                        let gradConsumo = ctx.createLinearGradient(0, 0, 0, 400);
+                        gradConsumo.addColorStop(0, 'rgba(244, 63, 94, 0.4)');
+                        gradConsumo.addColorStop(1, 'rgba(244, 63, 94, 0.0)');
+                        
+                        chart = new Chart(ctx, { 
+                            type: 'line', 
+                            data: { 
+                                labels: [agora], 
+                                datasets: [
+                                    { label: 'Geração Solar', data: [geracaoSolar], borderColor: '#06b6d4', backgroundColor: gradSolar, borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 },
+                                    { label: 'Geração Eólica', data: [geracaoEolica], borderColor: '#10b981', backgroundColor: gradEolica, borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 },
+                                    { label: 'Consumo Casa', data: [consumo], borderColor: '#f43f5e', backgroundColor: gradConsumo, borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 }
+                                ] 
+                            },
+                            options: { 
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: { legend: { display: true, labels: { color: '#cbd5e1', font: {size: 10} } } },
+                                scales: { y: { border: {dash: [4, 4]}, grid: {color: '#1e293b'} }, x: { grid: {display: false} } }
                             }
-                            chart.update();
+                        });
+                    } else {
+                        chart.data.labels.push(agora);
+                        chart.data.datasets[0].data.push(geracaoSolar);
+                        chart.data.datasets[1].data.push(geracaoEolica);
+                        chart.data.datasets[2].data.push(consumo);
+                        
+                        if (chart.data.labels.length > 120) { 
+                            chart.data.labels.shift(); 
+                            chart.data.datasets[0].data.shift(); 
+                            chart.data.datasets[1].data.shift(); 
+                            chart.data.datasets[2].data.shift(); 
                         }
+                        chart.update();
                     }
                 } catch (error) {}
             }
-            // ATUALIZAÇÃO DEFINIDA PARA 5 SEGUNDOS (5000ms)
             setInterval(atualizar, 5000);
         </script>
     </body>
